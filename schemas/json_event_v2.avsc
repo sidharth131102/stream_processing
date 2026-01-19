@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "JsonEvent",
+  "fields": [
+    { "name": "event_id", "type": "string" },
+    { "name": "event_type", "type": "string" },
+    { "name": "event_source", "type": "string" },
+    { "name": "event_ts", "type": "string" },
+    { "name": "payload", "type": "string" }
+  ]
+}

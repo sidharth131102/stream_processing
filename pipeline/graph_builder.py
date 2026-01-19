@@ -1,0 +1,137 @@
+import apache_beam as beam
+
+from pipeline.io_connectorss.pubsub_reader import read_pubsub
+from pipeline.io_connectorss.bq_writer import write_bq
+from pipeline.errors.dlq import WriteDLQ
+
+from pipeline.transforms.preprocess import PreProcess
+from pipeline.transforms.envelope import Envelope
+from pipeline.transforms.parser import ParseEvent
+from pipeline.transforms.transformation_engine import TransformationEngine
+from pipeline.transforms.dedup import DeduplicateLatest   # ✅ NEW
+from pipeline.windowing.event_time import AssignEventTime
+from pipeline.windowing.windows import ApplyWindows
+from pipeline.validators.soft_validator import SoftValidate
+from pipeline.observability.trackers import TrackInput, TrackOutput
+from pipeline.observability.lag import TrackEventLag
+
+
+def build_pipeline(p, cfg, subscription):
+    streaming = cfg["streaming_tuning"]
+
+    # ==================================================
+    # 1️⃣ Read + Preprocess
+    # ==================================================
+    preprocess = (
+    read_pubsub(p, subscription)
+    | "TrackInput" >> beam.ParDo(TrackInput())
+    | "PreProcess"
+    >> beam.ParDo(PreProcess()).with_outputs("dlq", main="main")
+    )
+
+    main = preprocess.main
+    preprocess_dlq = preprocess.dlq
+
+    # ==================================================
+    # 2️⃣ Envelope + Parse + Assign Event Time
+    # ==================================================
+    parsed = (
+        main
+        | "Envelope" >> beam.ParDo(Envelope())
+        | "ParseEvent" >> beam.ParDo(ParseEvent(cfg["source"]))
+        | "AssignEventTime"
+        >> beam.ParDo(AssignEventTime()).with_outputs("dlq", main="main")
+    )
+
+    main = parsed.main
+    main = main | "TrackEventLag" >> beam.ParDo(TrackEventLag())
+    event_time_dlq = parsed.dlq
+
+    # ==================================================
+    # 3️⃣ DEDUPLICATION (GLOBAL, STATEFUL, FIRST)
+    # ==================================================
+    dedup_cfg = streaming.get("dedup", {})
+    if dedup_cfg.get("mode", "single") != "none":
+        main = (
+            main
+            | "DeduplicateLatest"
+            >> DeduplicateLatest(
+                buffer_seconds=dedup_cfg["buffer_seconds"],max_state_age_sec=dedup_cfg.get("max_state_age_sec",1800)
+            )
+        )
+
+    # ==================================================
+    # 4️⃣ WINDOWING (AFTER DEDUP)
+    # ==================================================
+    if streaming.get("windowing", {}).get("enabled", True):
+        main = main | "ApplyWindows" >> ApplyWindows(streaming["windowing"])
+
+    # ==================================================
+    # 5️⃣ Transform
+    # ==================================================
+    transformed = (
+        main
+        | "Transform"
+        >> beam.ParDo(
+            TransformationEngine(cfg["transformations"])
+        ).with_outputs("dlq", main="main")
+    )
+
+    main = transformed.main
+    transform_dlq = transformed.dlq
+
+    # ==================================================
+    # 6️⃣ Validation
+    # ==================================================
+    validated = (
+        main
+        | "Validate"
+        >> beam.ParDo(
+            SoftValidate(cfg["validation"])
+        ).with_outputs("dlq", main="main")
+    )
+
+    main = validated.main
+    validation_dlq = validated.dlq
+
+    # ==================================================
+    # 7️⃣ OPTIONAL BATCHING
+    # ==================================================
+    batching_cfg = streaming.get("batching", {}).get("bigquery", {})
+    if batching_cfg.get("enabled", False):
+        main = (
+            main
+            | "BatchForBQ"
+            >> beam.BatchElements(
+                min_batch_size=batching_cfg["min_batch_size"],
+                max_batch_size=batching_cfg["max_batch_size"],
+            )
+        )
+
+    # ==================================================
+    # 8️⃣ Sink
+    # ==================================================
+    main = main | "TrackOutput" >> beam.ParDo(TrackOutput())
+    write_bq(main, cfg)
+
+    # ==================================================
+    # 9️⃣ DLQ
+    # ==================================================
+    (
+        (
+            preprocess_dlq
+            | "TagPreprocessDLQ"
+            >> beam.Map(lambda e: {"stage": "preprocess", **e}),
+            event_time_dlq
+            | "TagEventTimeDLQ"
+            >> beam.Map(lambda e: {"stage": "event_time", **e}),
+            transform_dlq
+            | "TagTransformDLQ"
+            >> beam.Map(lambda e: {"stage": "transform", **e}),
+            validation_dlq
+            | "TagValidationDLQ"
+            >> beam.Map(lambda e: {"stage": "validation", **e}),
+        )
+        | "FlattenDLQ" >> beam.Flatten()
+        | "WriteDLQ" >> WriteDLQ(cfg["destination"]["dlq_topic"])
+    )

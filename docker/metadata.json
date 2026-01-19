@@ -1,0 +1,32 @@
+{
+  "name": "JSON Streaming Accelerator",
+  "description": "Config-driven streaming accelerator for JSON events",
+  "parameters": [
+    {
+      "name": "subscription",
+      "label": "Pub/Sub subscription",
+      "helpText": "Input Pub/Sub subscription (projects/<project>/subscriptions/<sub>)",
+      "paramType": "TEXT"
+    },
+    {
+      "name": "config_bucket",
+      "label": "Config bucket",
+      "helpText": "GCS bucket containing pipeline configuration YAML files",
+      "paramType": "TEXT"
+    },
+    {
+      "name": "job_mode",
+      "label": "Job Mode",
+      "helpText": "Execution mode: streaming or backfill",
+      "paramType": "TEXT",
+      "defaultValue": "streaming"
+    },
+    {
+      "name": "env",
+      "label": "Environment",
+      "helpText": "Deployment environment (dev, staging, prod)",
+      "paramType": "TEXT",
+      "defaultValue": "dev"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+required_fields:
+  - event_id
+  - event_type
+  - event_source
+  - event_ts
+
+payload_required_fields:
+  - request_id      # ✅ NO "payload." prefix
+  - customer_id
+  - priority
+
+length_checks:
+  description:      # ✅ NO "payload." prefix
+    max: 500
+
+type_checks:
+  priority: STRING  # ✅ NO "payload." prefix
+
+#this file can be changes based on requirements/scenario specifally for payload fields

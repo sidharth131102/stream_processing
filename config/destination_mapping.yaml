@@ -1,0 +1,18 @@
+target:
+  project: stream-accelerator
+  dataset: analytics
+  table: service_requests
+
+envelope_fields:
+  beam_event_time: TIMESTAMP   # ONLY Beam-added fields
+  beam_processing_time: TIMESTAMP   # ONLY Beam-added fields
+
+payload_policy:
+  mode: DYNAMIC
+  default_type: STRING
+
+schema_mode: FINAL_OUTPUT
+
+dlq_topic: projects/stream-accelerator/topics/json-events-dlq
+
+#this file can be changes based on requirements/scenario

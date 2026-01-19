@@ -1,0 +1,5 @@
+apache-beam[gcp]==2.70.0
+pyyaml==6.0.1
+jsonpath-ng==1.6.1
+simpleeval==0.9.13
+

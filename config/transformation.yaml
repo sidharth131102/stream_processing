@@ -1,0 +1,31 @@
+field_mapping:
+  #event_time: event_timestamp  
+  # 🔥 Flatten payload fields to root level
+  request_id: payload.request_id
+  customer_id: payload.customer_id
+  request_type: payload.request_type
+  priority: payload.priority
+  location: payload.location
+  description: payload.description
+  source_system: payload.source_system
+
+business_rules:
+  - condition: "event.get('priority') == 'HIGH'"
+    output_field: is_critical
+    value: true
+
+enrichment:
+  - type: static_lookup
+    input_field: "location"        # ✅ FIXED: uses FLATTENED field
+    lookup:
+      Bangalore: SOUTH
+      Mumbai: WEST
+    output_field: region
+
+entity_extraction:                  # ✅ ADDED: was missing
+  - field: "description"           # ✅ Uses FLATTENED field
+    entities:
+      - name: equipment
+        pattern: "(transformer|meter|cable)"
+
+#this file can be changes based on requirements/scenario

@@ -1,0 +1,57 @@
+
+streaming design:
+
+Pub/Sub
+  ↓
+TrackInput (metrics)
+  ↓
+PreProcess
+  ├── DLQ (preprocess)
+  ↓
+Envelope
+  ↓
+ParseEvent (schema-aware)
+  ├── DLQ (parse)
+  ↓
+AssignEventTime
+  ↓
+TrackEventLag (watermark SLA)
+  ↓
+Stateful Dedup (TTL bounded)
+  ↓
+Windowing (event-time)
+  ↓
+Transformation Engine (versioned)
+  ├── DLQ (transform)
+  ↓
+Soft Validation
+  ├── DLQ (validation)
+  ↓
+(Optional batching)
+  ↓
+TrackOutput (metrics)
+  ↓
+BigQuery (main table)
+
+
+
+
+backfill design:
+
+GCS Archive
+  ↓
+ReadGCS (time-bounded)
+  ↓
+(Same pipeline graph)
+  ↓
+Transformation + Validation
+  ↓
+BigQuery (TEMP backfill table)
+
+
+
+gcloud artifacts repositories create dataflow-accelerators \
+  --project=stream-accelerator\
+  --repository-format=docker \
+  --location=us-central1 \
+  --description="Dataflow accelerator images"
