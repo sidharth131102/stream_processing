@@ -68,6 +68,26 @@ def ensure_service_account(project_id: str, sa_name: str, display_name: str):
 
     return email
 
+def ensure_composer_service_agent(project_id: str, project_number: str):
+    """
+    Ensure Composer Service Agent has required IAM role.
+    """
+    agent_email = (
+        f"service-{project_number}"
+        "@cloudcomposer-accounts.iam.gserviceaccount.com"
+    )
+
+    print(
+        f"\n🔐 Ensuring Composer Service Agent IAM: {agent_email}"
+    )
+
+    run([
+        "gcloud", "projects", "add-iam-policy-binding",
+        project_id,
+        "--member", f"serviceAccount:{agent_email}",
+        "--role", "roles/composer.ServiceAgentV2Ext",
+    ])
+
 
 def grant_roles(project_id: str, member: str, roles: list):
     for role in roles:
@@ -139,12 +159,9 @@ def main():
         # --------------------------------------------------
         # Ensure Composer service agent IAM
         # --------------------------------------------------
-        print("\n🔐 Ensuring Composer service agent IAM")
-
-        grant_roles(
-            project_id,
-            f"serviceAccount:{agent_cfg['email']}",
-            agent_cfg["roles"],
+        ensure_composer_service_agent(
+            project_id=project_id,
+            project_number=project_number,
         )
 
         # --------------------------------------------------

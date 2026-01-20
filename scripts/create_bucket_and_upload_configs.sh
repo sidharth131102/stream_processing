@@ -35,7 +35,7 @@ echo "Creating Dataflow folders..."
 gsutil mkdir gs://stream-accelerator-dataflow/staging || true
 gsutil mkdir gs://stream-accelerator-dataflow/temp || true
 gsutil mkdir gs://stream-accelerator-dataflow/templates || true
-gsutil mkdir gs://stream-accelerator-config/schemas || true
+
 
 echo "✅ Buckets and configs ready"
 
