@@ -1,0 +1,14 @@
+{
+  "event_id": "string",
+  "event_type": "string",
+  "event_source": "string",
+  "event_ts": "string",
+
+  "payload.request_id": "string",
+  "payload.customer_id": "string",
+  "payload.request_type": "string",
+  "payload.priority": "string",
+  "payload.location": "string",
+  "payload.description": "string",
+  "payload.source_system": "string"
+}

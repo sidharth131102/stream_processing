@@ -23,6 +23,7 @@ gsutil cp config/destination_mapping.yaml gs://$CONFIG_BUCKET/
 gsutil cp config/transformation.yaml gs://$CONFIG_BUCKET/
 gsutil cp config/validation.yaml gs://$CONFIG_BUCKET/
 gsutil cp config/pipeline.yaml gs://$CONFIG_BUCKET/
+gsutil cp schemas/json_event_v2.json gs://stream-accelerator-config/schemas/json_event_v2.json
 
 # -----------------------------
 # Create Dataflow Bucket
@@ -34,6 +35,7 @@ echo "Creating Dataflow folders..."
 gsutil mkdir gs://stream-accelerator-dataflow/staging || true
 gsutil mkdir gs://stream-accelerator-dataflow/temp || true
 gsutil mkdir gs://stream-accelerator-dataflow/templates || true
+gsutil mkdir gs://stream-accelerator-config/schemas || true
 
 echo "✅ Buckets and configs ready"
 

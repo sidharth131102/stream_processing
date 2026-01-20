@@ -1,4 +1,5 @@
 import yaml
+import json
 from google.cloud import storage
 
 
@@ -24,6 +25,13 @@ def load_all_configs(bucket: str):
                 f"Required config '{name}' not found in gs://{bucket}"
             )
         return yaml.safe_load(blob.download_as_text())
+    
+    def _load_json(name: str):
+        blob = gcs_bucket.blob(name)
+        if not blob.exists():
+            raise FileNotFoundError(f"Missing schema file: {name}")
+        return json.loads(blob.download_as_text())
+
 
     cfg = {
         "source": _load_yaml("source_mapping.yaml"),
@@ -37,6 +45,12 @@ def load_all_configs(bucket: str):
             raise ValueError(f"Config '{k}' loaded as empty")
 
     pipeline_cfg = _load_yaml("pipeline.yaml")
+    schema_cfg = pipeline_cfg.get("schema_management", {})
+    if schema_cfg.get("enabled", False):
+        schema_name = schema_cfg["schema_name"]
+        cfg["expected_schema"] = _load_json(f"schemas/{schema_name}.json")
+        cfg["schema_management"] = schema_cfg
+
 
     streaming_tuning = pipeline_cfg.get("streaming_tuning")
     if not streaming_tuning:

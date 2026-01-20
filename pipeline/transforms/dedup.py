@@ -36,7 +36,7 @@ class _BufferedDedupDoFn(beam.DoFn):
     """
 
     latest_state = ReadModifyWriteStateSpec("latest", PickleCoder())
-    emit_timer = TimerSpec("emit", TimeDomain.WATERMARK)
+    emit_timer = TimerSpec("emit", TimeDomain.PROCESSING_TIME)
 
     def __init__(self, buffer_seconds: int, max_state_age_sec: int):
         self.buffer_seconds = buffer_seconds

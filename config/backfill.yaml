@@ -1,0 +1,122 @@
+# ================================
+# BACKFILL CONFIGURATION
+# ================================
+
+mode: backfill
+
+project:
+  id: stream-accelerator
+  region: us-central1
+
+# -------------------------------
+# Input (GCS Archive)
+# -------------------------------
+source:
+  type: gcs
+  format: json            # json | avro | parquet (future-proof)
+  archive_bucket: stream-accelerator-archive
+  path_pattern: >
+    gs://stream-accelerator-archive/events/{yyyy}/{MM}/{dd}/*.json
+  event_time_field: event_ts
+  timezone: UTC
+
+# -------------------------------
+# Backfill Window
+# (Injected by DAG at runtime)
+# -------------------------------
+backfill_window:
+  start_time: null        # ISO-8601, injected by Airflow
+  end_time: null          # ISO-8601, injected by Airflow
+  inclusive_start: true
+  exclusive_end: true
+
+# -------------------------------
+# Deduplication Strategy
+# -------------------------------
+deduplication:
+  enabled: true
+  key_fields:
+    - event_id
+  strategy: latest_by_event_time
+  event_time_field: event_ts
+
+# -------------------------------
+# Transformations
+# (Reuse same configs as streaming)
+# -------------------------------
+transformations:
+  config_bucket: stream-accelerator-config
+  files:
+    - transformation.yaml
+    - validation.yaml
+
+# -------------------------------
+# Output (Two-phase write)
+# -------------------------------
+sink:
+  type: bigquery
+
+  # Phase 1: Temporary table
+  temp_table:
+    dataset: analytics
+    table_prefix: service_requests_backfill
+    write_disposition: WRITE_TRUNCATE
+    create_disposition: CREATE_IF_NEEDED
+    partitioning:
+      type: time
+      field: event_date
+
+  # Phase 2: Merge into main table
+  merge:
+    target_dataset: analytics
+    target_table: service_requests
+    merge_keys:
+      - event_id
+    update_when_matched: true
+    insert_when_not_matched: true
+
+# -------------------------------
+# Dataflow Execution Settings
+# -------------------------------
+dataflow:
+  job:
+    name_prefix: json-backfill
+    runner: DataflowRunner
+    streaming: false
+
+    # Fixed workers (IMPORTANT)
+    autoscaling_algorithm: NONE
+    num_workers: 2
+    max_workers: 4
+
+    worker_machine_type: e2-standard-4
+    disk_size_gb: 100
+
+    staging_location: gs://stream-accelerator-dataflow/staging
+    temp_location: gs://stream-accelerator-dataflow/temp
+
+    experiments:
+      - use_runner_v2
+
+# -------------------------------
+# Safety & Guardrails
+# -------------------------------
+safety:
+  max_backfill_days: 7
+  fail_if_target_table_missing: true
+  require_window_parameters: true
+
+# -------------------------------
+# Observability
+# -------------------------------
+monitoring:
+  emit_metrics: true
+  metrics_prefix: backfill
+  log_level: INFO
+
+# -------------------------------
+# DLQ (Optional)
+# -------------------------------
+dlq:
+  enabled: true
+  topic: projects/stream-accelerator/topics/json-events-backfill-dlq

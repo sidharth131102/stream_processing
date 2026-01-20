@@ -67,7 +67,7 @@ def build_gcloud_command(cfg):
 
     # -----------------------------
     # if "worker_region" in job:
-    #     cmd.extend(["--worker-region", job["worker_region"]])
+    #     cmd.extend(["--worker-region", job["worker_region"]])                 #for optimisation uncomment lines from 69-74
     # if "worker_zone" in job:
     #     cmd.extend(["--worker-zone", job["worker_zone"]])
     # if "worker_machine_type" in job:

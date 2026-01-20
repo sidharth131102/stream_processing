@@ -48,6 +48,13 @@ class PreProcess(beam.DoFn):
                     event = json.loads(
                         base64.b64decode(element_str).decode("utf-8")
                     )
+            if "payload" in event:
+                if isinstance(event["payload"], dict):
+                    # Message 1 path: convert dict to JSON string to match schema
+                    event["payload"] = json.dumps(event["payload"])
+                elif isinstance(event["payload"], str):
+                    # Message 2 path: already a string, keep it as is
+                    pass
 
             if pubsub_meta:
                 event["_pubsub"] = pubsub_meta
