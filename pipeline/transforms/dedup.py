@@ -6,14 +6,10 @@ from apache_beam.transforms.userstate import (
     on_timer,
     TimeDomain,
 )
-from apache_beam.metrics import Metrics
 from apache_beam.utils.timestamp import Timestamp, Duration
 from datetime import datetime
-from pipeline.observability.metrics import PipelineMetrics
 
-# ----------------------------------
-# Constants
-# ----------------------------------
+from pipeline.observability.metrics import PipelineMetrics
 
 
 # ----------------------------------
@@ -42,14 +38,9 @@ class _BufferedDedupDoFn(beam.DoFn):
     latest_state = ReadModifyWriteStateSpec("latest", PickleCoder())
     emit_timer = TimerSpec("emit", TimeDomain.WATERMARK)
 
-    def __init__(self, buffer_seconds: int,max_state_age_sec: int):
+    def __init__(self, buffer_seconds: int, max_state_age_sec: int):
         self.buffer_seconds = buffer_seconds
         self.max_state_age_sec = max_state_age_sec
-
-        # Metrics
-        PipelineMetrics.dedup_seen.inc()
-        PipelineMetrics.dedup_emitted.inc()
-        PipelineMetrics.dedup_dropped.inc()
 
     def process(
         self,
@@ -58,11 +49,13 @@ class _BufferedDedupDoFn(beam.DoFn):
         timer=beam.DoFn.TimerParam(emit_timer),
     ):
         key, event = element
-        self.seen.inc()
+
+        # ---- metrics: seen ----
+        PipelineMetrics.dedup_seen.inc()
 
         new_ts = _parse_event_ts(event)
         if new_ts <= 0:
-            self.dropped_late.inc()
+            PipelineMetrics.dedup_dropped.inc()
             return
 
         existing = latest.read()
@@ -76,6 +69,9 @@ class _BufferedDedupDoFn(beam.DoFn):
         # Keep latest event
         if existing is None or new_ts > existing_ts:
             latest.write(event)
+        else:
+            PipelineMetrics.dedup_dropped.inc()
+            return
 
         # Schedule buffered emission in event-time
         timer.set(
@@ -86,8 +82,11 @@ class _BufferedDedupDoFn(beam.DoFn):
     def emit_final(self, latest=beam.DoFn.StateParam(latest_state)):
         final_event = latest.read()
         if final_event:
-            self.emitted.inc()
+            PipelineMetrics.dedup_emitted.inc()
             yield final_event
+        else:
+            PipelineMetrics.dedup_dropped.inc()
+
         latest.clear()
 
 
