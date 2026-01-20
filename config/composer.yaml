@@ -1,0 +1,100 @@
+# --------------------------------------------------
+# Cloud Composer Control Plane
+# --------------------------------------------------
+# This file defines EVERYTHING related to orchestration:
+# - Project identity
+# - Composer environment
+# - Composer service account
+# - IAM roles
+# - Airflow variables
+# - DAG deployment strategy
+#
+# This file is intended to be uploaded to the same
+# config bucket as pipeline.yaml
+# --------------------------------------------------
+
+project:
+  id: stream-accelerator
+  number: 821481445086
+
+composer:
+  environment:
+    name: data-platform-dev-c3
+    region: us-east1
+
+    # Cloud Composer v3 image
+    image_version: composer-3-airflow-2.10.5
+
+    # Small / medium / large
+    environment_size: small
+
+    # Optional labels (recommended for platforms)
+    labels:
+      platform: stream-accelerator
+      env: dev
+      owner: data-platform
+
+  # --------------------------------------------------
+  # Composer Service Account
+  # --------------------------------------------------
+  service_account:
+    name: composer-sa
+    display_name: Cloud Composer Service Account
+
+    # Roles required for DAG execution
+    # (Dataflow, Pub/Sub, GCS, BigQuery)
+    roles:
+      - roles/composer.worker
+      - roles/dataflow.admin
+      - roles/dataflow.worker
+      - roles/pubsub.subscriber
+      - roles/pubsub.publisher
+      - roles/pubsub.viewer
+      - roles/storage.objectAdmin
+      - roles/bigquery.jobUser
+      - roles/bigquery.dataViewer
+
+  # --------------------------------------------------
+  # Composer Service Agent (v3 requirement)
+  # --------------------------------------------------
+  service_agent:
+    email: service-821481445086@cloudcomposer-accounts.iam.gserviceaccount.com
+    roles:
+      - roles/composer.ServiceAgentV2Ext
+
+  # --------------------------------------------------
+  # Airflow Runtime Configuration
+  # --------------------------------------------------
+  airflow:
+    variables:
+      # Used by all DAGs to load pipeline.yaml dynamically
+      config_bucket: stream-accelerator-config
+      pipeline_yaml_path: pipeline.yaml
+
+    # Optional: default Airflow config overrides
+    config_overrides:
+      core.load_examples: "False"
+      webserver.expose_config: "True"
+
+  # --------------------------------------------------
+  # DAG Deployment
+  # --------------------------------------------------
+  dags:
+    # Local path in repo
+    local_path: dags/
+
+    # Deployment strategy:
+    # - rsync  → sync and delete stale DAGs (recommended)
+    # - overwrite → simple copy
+    sync_strategy: rsync
+
+    # DAG folder inside Composer bucket
+    remote_path: dags/
+
+  # --------------------------------------------------
+  # Validation & Safety
+  # --------------------------------------------------
+  validation:
+    fail_if_env_exists: false
+    verify_bucket_owner: true
+    verify_airflow_variables: true

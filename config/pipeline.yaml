@@ -127,6 +127,12 @@ deployment:
   max_image_versions: 5
   enable_monitoring: true
   enable_logging: true
+
+control_planes:
+  composer:
+    config_bucket: stream-accelerator-config
+    config_path: composer.yaml
+    
 orchestration:
   dags:
     streaming_start: dataflow_streaming_start
@@ -151,3 +157,4 @@ schema_management:
     on_type_change: FAIL
 
   dlq_on_violation: true
+
