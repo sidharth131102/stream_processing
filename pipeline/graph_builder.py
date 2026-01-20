@@ -14,7 +14,7 @@ from pipeline.windowing.windows import ApplyWindows
 from pipeline.validators.soft_validator import SoftValidate
 from pipeline.observability.trackers import TrackInput, TrackOutput
 from pipeline.observability.lag import TrackEventLag
-
+from pipeline.schema.schema_guard import SchemaGuard
 
 def build_pipeline(p, cfg, subscription):
     streaming = cfg["streaming_tuning"]
@@ -39,13 +39,32 @@ def build_pipeline(p, cfg, subscription):
         main
         | "Envelope" >> beam.ParDo(Envelope())
         | "ParseEvent" >> beam.ParDo(ParseEvent(cfg["source"]))
+    )
+
+    schema_checked = (
+        parsed
+        | "SchemaGuard"
+        >> beam.ParDo(
+            SchemaGuard(
+                cfg["schema_management"],
+                cfg["expected_schema"]
+            )
+        ).with_outputs("schema_dlq", main="main")
+    )
+
+    main = schema_checked.main
+    schema_dlq = schema_checked.schema_dlq
+
+    # Now assign event time
+    parsed_with_time = (
+        main
         | "AssignEventTime"
         >> beam.ParDo(AssignEventTime()).with_outputs("dlq", main="main")
     )
 
-    main = parsed.main
-    main = main | "TrackEventLag" >> beam.ParDo(TrackEventLag())
-    event_time_dlq = parsed.dlq
+    main = parsed_with_time.main
+    event_time_dlq = parsed_with_time.dlq
+
 
     # ==================================================
     # 3️⃣ DEDUPLICATION (GLOBAL, STATEFUL, FIRST)
@@ -131,6 +150,9 @@ def build_pipeline(p, cfg, subscription):
             validation_dlq
             | "TagValidationDLQ"
             >> beam.Map(lambda e: {"stage": "validation", **e}),
+            schema_dlq
+            | "TagSchemaDLQ"
+            >> beam.Map(lambda e: {"stage": "schema", **e}),
         )
         | "FlattenDLQ" >> beam.Flatten()
         | "WriteDLQ" >> WriteDLQ(cfg["destination"]["dlq_topic"])
