@@ -26,30 +26,29 @@ def load_pipeline_yaml(**context):
     """
     Load pipeline.yaml from GCS and extract Dataflow-related config.
     """
-    bucket = Variable.get("config_bucket")  # stream-accelerator-config
-    path = Variable.get("pipeline_yaml_path")  # pipeline.yaml
+    bucket = Variable.get("config_bucket")
+    path = Variable.get("pipeline_yaml_path")
 
     hook = GCSHook()
     with tempfile.NamedTemporaryFile() as f:
         hook.download(bucket, path, f.name)
         cfg = yaml.safe_load(f)
 
-    dataflow_cfg = cfg["dataflow"]
     project_cfg = cfg["project"]
-
+    dataflow_cfg = cfg["dataflow"]
     job_cfg = dataflow_cfg["job"]
 
-    resolved = {
+    return {
         "project_id": project_cfg["id"],
         "region": project_cfg["region"],
         "template_path": dataflow_cfg["template"]["storage_path"],
-        "job_name": f"{job_cfg['name_prefix']}",
-        "service_account": f"{cfg['service_account']['name']}@{project_cfg['id']}.iam.gserviceaccount.com",
+        "job_name_prefix": job_cfg["name_prefix"],
+        "service_account": (
+            f"{cfg['service_account']['name']}"
+            f"@{project_cfg['id']}.iam.gserviceaccount.com"
+        ),
         "parameters": job_cfg["parameters"],
-        "enable_streaming_engine": job_cfg.get("enable_streaming_engine", False),
     }
-
-    return resolved
 
 
 def check_existing_streaming_job(**context):
@@ -60,7 +59,6 @@ def check_existing_streaming_job(**context):
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
 
     hook = DataflowHook(
-        gcp_conn_id="google_cloud_default",
         location=cfg["region"],
     )
 
@@ -68,8 +66,9 @@ def check_existing_streaming_job(**context):
 
     for job in jobs:
         if (
-            job["name"].startswith(cfg["job_name"])
-            and job["currentState"] in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
+            job["name"].startswith(cfg["job_name_prefix"])
+            and job["currentState"]
+            in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
         ):
             return "streaming_job_exists"
 
@@ -100,7 +99,9 @@ with DAG(
         python_callable=check_existing_streaming_job,
     )
 
-    streaming_job_exists = EmptyOperator(task_id="streaming_job_exists")
+    streaming_job_exists = EmptyOperator(
+        task_id="streaming_job_exists"
+    )
 
     start_streaming_job = DataflowStartFlexTemplateOperator(
         task_id="start_streaming_job",
@@ -108,11 +109,21 @@ with DAG(
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
         body={
             "launchParameter": {
-                "jobName": "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['job_name'] }}-{{ ts_nodash }}",
-                "containerSpecGcsPath": "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['template_path'] }}",
-                "parameters": {{ ti.xcom_pull(task_ids='load_pipeline_yaml')['parameters'] | tojson }},
+                "jobName": (
+                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['job_name_prefix'] }}"
+                    "-{{ ts_nodash }}"
+                ),
+                "containerSpecGcsPath": (
+                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['template_path'] }}"
+                ),
+                # IMPORTANT: parameters must be templated as JSON string
+                "parameters": (
+                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['parameters'] | tojson }}"
+                ),
                 "environment": {
-                    "serviceAccountEmail": "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['service_account'] }}"
+                    "serviceAccountEmail": (
+                        "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['service_account'] }}"
+                    )
                 },
             }
         },

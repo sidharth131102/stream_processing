@@ -23,6 +23,9 @@ START_DATE = datetime(2024, 1, 1)
 # Helpers
 # --------------------------------------------------
 def load_pipeline_config(**context):
+    """
+    Load pipeline.yaml from GCS and extract recovery-related config.
+    """
     bucket = Variable.get("config_bucket")
     path = Variable.get("pipeline_yaml_path")
 
@@ -32,34 +35,53 @@ def load_pipeline_config(**context):
         cfg = yaml.safe_load(f)
 
     return {
-        "project": cfg["project"]["id"],
+        "project_id": cfg["project"]["id"],
         "region": cfg["project"]["region"],
         "job_prefix": cfg["dataflow"]["job"]["name_prefix"],
-        "streaming_start_dag": cfg["orchestration"]["dags"]["streaming_start"]
+        "streaming_start_dag": cfg["orchestration"]["dags"]["streaming_start"],
     }
 
 
 def check_dataflow_state(**context):
-    cfg = context["ti"].xcom_pull(task_ids="load_pipeline_config")
+    """
+    Determine whether a healthy streaming Dataflow job exists.
+
+    Logic:
+    - If at least ONE RUNNING job exists → healthy
+    - If only QUEUED / FAILED / CANCELLED jobs exist → recovery needed
+    - If no jobs exist → recovery needed
+    """
+    ti = context["ti"]
+    cfg = ti.xcom_pull(task_ids="load_pipeline_config")
+
     hook = DataflowHook(location=cfg["region"])
+    jobs = hook.get_jobs(project_id=cfg["project_id"])
 
-    jobs = hook.get_jobs(project_id=cfg["project"])
+    # Filter jobs belonging to this pipeline
+    relevant_jobs = [
+        job for job in jobs
+        if job["name"].startswith(cfg["job_prefix"])
+    ]
 
-    for job in jobs:
-        if job["name"].startswith(cfg["job_prefix"]):
-            return job["currentState"]
+    if not relevant_jobs:
+        return "NOT_RUNNING"
 
-    return "NOT_RUNNING"
+    # Healthy condition: at least one RUNNING job
+    for job in relevant_jobs:
+        if job["currentState"] == "JOB_STATE_RUNNING":
+            return "RUNNING"
+
+    # No healthy job found
+    return "NEEDS_RECOVERY"
 
 
 def decide_recovery(**context):
+    """
+    Decide whether to trigger streaming restart.
+    """
     state = context["ti"].xcom_pull(task_ids="check_dataflow_state")
 
-    if state in (
-        "JOB_STATE_FAILED",
-        "JOB_STATE_CANCELLED",
-        "NOT_RUNNING",
-    ):
+    if state in ("NOT_RUNNING", "NEEDS_RECOVERY"):
         return "trigger_streaming_restart"
 
     return "do_nothing"
@@ -94,7 +116,7 @@ with DAG(
         python_callable=decide_recovery,
     )
 
-    restart_streaming = TriggerDagRunOperator(
+    trigger_restart = TriggerDagRunOperator(
         task_id="trigger_streaming_restart",
         trigger_dag_id="{{ ti.xcom_pull(task_ids='load_pipeline_config')['streaming_start_dag'] }}",
         reset_dag_run=True,
@@ -104,7 +126,7 @@ with DAG(
     do_nothing = EmptyOperator(task_id="do_nothing")
     end = EmptyOperator(task_id="end")
 
-    # Graph
+    # DAG graph
     start >> load_cfg >> check_state >> decide
-    decide >> restart_streaming >> end
+    decide >> trigger_restart >> end
     decide >> do_nothing >> end

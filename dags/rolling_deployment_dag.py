@@ -15,13 +15,11 @@ from airflow.providers.google.cloud.operators.dataflow import (
     DataflowStopJobOperator,
 )
 
-
 # ----------------------------------------------------
 # DAG METADATA
 # ----------------------------------------------------
 DAG_ID = "dataflow_streaming_rolling_deploy"
 START_DATE = datetime(2024, 1, 1)
-
 
 # ----------------------------------------------------
 # Helpers
@@ -35,36 +33,35 @@ def load_pipeline_yaml(**context):
         hook.download(bucket, path, f.name)
         cfg = yaml.safe_load(f)
 
-    resolved = {
-        "project_id": cfg["project"]["id"],
-        "region": cfg["project"]["region"],
-        "template_path": cfg["dataflow"]["template"]["storage_path"],
-        "job_name_prefix": cfg["dataflow"]["job"]["name_prefix"],
-        "parameters": cfg["dataflow"]["job"]["parameters"],
-        "service_account": f"{cfg['service_account']['name']}@{cfg['project']['id']}.iam.gserviceaccount.com",
-        "enable_streaming_engine": cfg["dataflow"]["job"].get(
-            "enable_streaming_engine", False
+    project_cfg = cfg["project"]
+    dataflow_cfg = cfg["dataflow"]
+    job_cfg = dataflow_cfg["job"]
+
+    return {
+        "project_id": project_cfg["id"],
+        "region": project_cfg["region"],
+        "template_path": dataflow_cfg["template"]["storage_path"],
+        "job_name_prefix": job_cfg["name_prefix"],
+        "parameters": job_cfg["parameters"],
+        "service_account": (
+            f"{cfg['service_account']['name']}"
+            f"@{project_cfg['id']}.iam.gserviceaccount.com"
         ),
     }
-
-    return resolved
 
 
 def find_existing_job(**context):
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
 
-    hook = DataflowHook(
-        gcp_conn_id="google_cloud_default",
-        location=cfg["region"],
-    )
-
+    hook = DataflowHook(location=cfg["region"])
     jobs = hook.get_jobs(project_id=cfg["project_id"])
 
     for job in jobs:
         if (
             job["name"].startswith(cfg["job_name_prefix"])
-            and job["currentState"] in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
+            and job["currentState"]
+            in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
         ):
             ti.xcom_push(key="job_id", value=job["id"])
             return "stop_existing_job"
@@ -73,14 +70,14 @@ def find_existing_job(**context):
 
 
 def wait_for_job_drained(**context):
+    """
+    Poll Dataflow until the old streaming job reaches DRAINED.
+    """
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
     job_id = ti.xcom_pull(task_ids="find_existing_job", key="job_id")
 
-    hook = DataflowHook(
-        gcp_conn_id="google_cloud_default",
-        location=cfg["region"],
-    )
+    hook = DataflowHook(location=cfg["region"])
 
     while True:
         job = hook.get_job(
@@ -89,6 +86,7 @@ def wait_for_job_drained(**context):
         )
 
         state = job["currentState"]
+
         if state == "JOB_STATE_DRAINED":
             return
 
@@ -127,7 +125,6 @@ with DAG(
         project_id="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['project_id'] }}",
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
         job_id="{{ ti.xcom_pull(task_ids='find_existing_job', key='job_id') }}",
-        drain=True,
     )
 
     wait_for_drain = PythonOperator(
@@ -141,11 +138,20 @@ with DAG(
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
         body={
             "launchParameter": {
-                "jobName": "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['job_name_prefix'] }}-{{ ts_nodash }}",
-                "containerSpecGcsPath": "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['template_path'] }}",
-                "parameters": {{ ti.xcom_pull(task_ids='load_pipeline_yaml')['parameters'] | tojson }},
+                "jobName": (
+                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['job_name_prefix'] }}"
+                    "-{{ ts_nodash }}"
+                ),
+                "containerSpecGcsPath": (
+                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['template_path'] }}"
+                ),
+                "parameters": (
+                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['parameters'] | tojson }}"
+                ),
                 "environment": {
-                    "serviceAccountEmail": "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['service_account'] }}",
+                    "serviceAccountEmail": (
+                        "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['service_account'] }}"
+                    ),
                 },
             }
         },

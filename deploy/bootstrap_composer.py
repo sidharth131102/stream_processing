@@ -123,10 +123,14 @@ def get_dag_bucket(env_name: str, region: str) -> str:
 def set_airflow_variable(env_name: str, region: str, key: str, value: str):
     run([
         "gcloud", "composer", "environments", "run",
-        env_name,
-        "--location", region,
-        "variables", "set",
-        key, value
+        env_name,        # 1. Environment Name
+        "variables",     # 2. SUBCOMMAND must be here
+        "--location",
+        region,          # 3. Gcloud flags
+        "--",            # 4. Separator
+        "set",
+        key,
+        value            # 5. Airflow CLI arguments
     ])
 
 

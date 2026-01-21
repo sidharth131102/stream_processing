@@ -9,8 +9,9 @@ from airflow.operators.empty import EmptyOperator
 
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
 from airflow.providers.google.cloud.hooks.dataflow import DataflowHook
-from airflow.providers.google.cloud.operators.dataflow import DataflowStopJobOperator
-
+from airflow.providers.google.cloud.operators.dataflow import (
+    DataflowStopJobOperator,
+)
 
 # ----------------------------------------------------
 # DAG METADATA
@@ -36,13 +37,11 @@ def load_pipeline_yaml(**context):
     project_cfg = cfg["project"]
     job_cfg = cfg["dataflow"]["job"]
 
-    resolved = {
+    return {
         "project_id": project_cfg["id"],
         "region": project_cfg["region"],
         "job_name_prefix": job_cfg["name_prefix"],
     }
-
-    return resolved
 
 
 def find_running_streaming_job(**context):
@@ -53,7 +52,6 @@ def find_running_streaming_job(**context):
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
 
     hook = DataflowHook(
-        gcp_conn_id="google_cloud_default",
         location=cfg["region"],
     )
 
@@ -62,9 +60,9 @@ def find_running_streaming_job(**context):
     for job in jobs:
         if (
             job["name"].startswith(cfg["job_name_prefix"])
-            and job["currentState"] in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
+            and job["currentState"]
+            in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
         ):
-            # Push job_id for stop operator
             ti.xcom_push(key="job_id", value=job["id"])
             return "stop_streaming_job"
 
@@ -104,8 +102,6 @@ with DAG(
         project_id="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['project_id'] }}",
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
         job_id="{{ ti.xcom_pull(task_ids='find_running_streaming_job', key='job_id') }}",
-        drain=True,  # graceful shutdown
-        poll_sleep=30,
     )
 
     end = EmptyOperator(task_id="end")

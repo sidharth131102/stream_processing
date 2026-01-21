@@ -1,4 +1,5 @@
 import apache_beam as beam
+import time
 from apache_beam.coders import PickleCoder
 from apache_beam.transforms.userstate import (
     ReadModifyWriteStateSpec,
@@ -6,37 +7,29 @@ from apache_beam.transforms.userstate import (
     on_timer,
     TimeDomain,
 )
-from apache_beam.utils.timestamp import Timestamp, Duration
 from datetime import datetime
-
 from pipeline.observability.metrics import PipelineMetrics
 
-
-# ----------------------------------
-# Helpers
-# ----------------------------------
 def _parse_event_ts(event):
     try:
         ts = event.get("event_ts")
         if not ts:
             return 0.0
-        return datetime.fromisoformat(
-            ts.replace("Z", "+00:00")
-        ).timestamp()
+        # Handles 'Z' and ISO offsets
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
     except Exception:
         return 0.0
 
-
-# ----------------------------------
-# Stateful DoFn
-# ----------------------------------
 class _BufferedDedupDoFn(beam.DoFn):
     """
-    Global latest-event deduplication per event_id.
+    Stateful logic to keep only the newest event version within a processing-time window.
     """
-
-    latest_state = ReadModifyWriteStateSpec("latest", PickleCoder())
-    emit_timer = TimerSpec("emit", TimeDomain.PROCESSING_TIME)
+    # Stores the actual event dictionary
+    latest_event_state = ReadModifyWriteStateSpec("latest_event", PickleCoder())
+    # Stores the float timestamp of the current buffered event
+    latest_ts_state = ReadModifyWriteStateSpec("latest_ts", beam.coders.FloatCoder())
+    # Real-time timer for the buffer duration
+    emit_timer = TimerSpec("emit", TimeDomain.REAL_TIME)
 
     def __init__(self, buffer_seconds: int, max_state_age_sec: int):
         self.buffer_seconds = buffer_seconds
@@ -45,60 +38,54 @@ class _BufferedDedupDoFn(beam.DoFn):
     def process(
         self,
         element,
-        latest=beam.DoFn.StateParam(latest_state),
+        event_state=beam.DoFn.StateParam(latest_event_state),
+        ts_state=beam.DoFn.StateParam(latest_ts_state),
         timer=beam.DoFn.TimerParam(emit_timer),
     ):
         key, event = element
-
-        # ---- metrics: seen ----
         PipelineMetrics.dedup_seen.inc()
 
         new_ts = _parse_event_ts(event)
-        if new_ts <= 0:
-            PipelineMetrics.dedup_dropped.inc()
-            return
+        existing_ts = ts_state.read() or -1.0
 
-        existing = latest.read()
-        existing_ts = _parse_event_ts(existing) if existing else -1
+        # TTL Check: If the state is older than max_state_age, treat as new
+        if existing_ts > 0 and (new_ts - existing_ts) > self.max_state_age_sec:
+            event_state.clear()
+            ts_state.clear()
+            existing_ts = -1.0
 
-        # Hard TTL guard (state safety)
-        if existing and (new_ts - existing_ts) > self.max_state_age_sec:
-            latest.clear()
-            existing = None
-
-        # Keep latest event
-        if existing is None or new_ts > existing_ts:
-            latest.write(event)
+        # Optimization: Only update state if the incoming event is strictly newer
+        if new_ts > existing_ts:
+            event_state.write(event)
+            ts_state.write(new_ts)
+            
+            # Snooze Logic: Push the timer forward from CURRENT clock time.
+            # This ensures we wait for 'quiet time' before emitting.
+            timer.set(time.time() + self.buffer_seconds)
         else:
             PipelineMetrics.dedup_dropped.inc()
-            return
-
-        # Schedule buffered emission in event-time
-        timer.set(
-            Timestamp(new_ts) + Duration(seconds=self.buffer_seconds)
-        )
 
     @on_timer(emit_timer)
-    def emit_final(self, latest=beam.DoFn.StateParam(latest_state)):
-        final_event = latest.read()
+    def emit_final(
+        self, 
+        event_state=beam.DoFn.StateParam(latest_event_state),
+        ts_state=beam.DoFn.StateParam(latest_ts_state)
+    ):
+        final_event = event_state.read()
         if final_event:
             PipelineMetrics.dedup_emitted.inc()
             yield final_event
-        else:
-            PipelineMetrics.dedup_dropped.inc()
+        
+        # Clear state to prevent memory leaks and allow future updates for this ID
+        event_state.clear()
+        ts_state.clear()
 
-        latest.clear()
-
-
-# ----------------------------------
-# PTransform Wrapper
-# ----------------------------------
 class DeduplicateLatest(beam.PTransform):
     """
-    Deduplicate globally by event_id.
-    Emits the latest event after buffer_seconds.
+    Industry-Standard Deduplication:
+    1. Forces Global Window to ensure IDs find each other.
+    2. Uses Stateful Snooze timer to emit only the latest event.
     """
-
     def __init__(self, buffer_seconds: int = 30, max_state_age_sec: int = 1800):
         self.buffer_seconds = buffer_seconds
         self.max_state_age_sec = max_state_age_sec
@@ -106,10 +93,10 @@ class DeduplicateLatest(beam.PTransform):
     def expand(self, pcoll):
         return (
             pcoll
-            | "KeyByEventId"
-            >> beam.Map(lambda e: (e.get("event_id", "unknown"), e))
-            | "BufferedDedup"
-            >> beam.ParDo(
+            # 1. Force GlobalWindow so all event_ids hit the same state cell
+            | "ForceGlobalWindow" >> beam.WindowInto(beam.window.GlobalWindows())
+            | "KeyByEventId" >> beam.Map(lambda e: (e.get("event_id", "unknown"), e))
+            | "StatefulBuffer" >> beam.ParDo(
                 _BufferedDedupDoFn(
                     buffer_seconds=self.buffer_seconds,
                     max_state_age_sec=self.max_state_age_sec,

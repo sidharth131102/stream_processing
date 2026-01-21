@@ -67,7 +67,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v60
+    tag: v66
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -127,12 +127,10 @@ deployment:
   max_image_versions: 5
   enable_monitoring: true
   enable_logging: true
-
 control_planes:
   composer:
     config_bucket: stream-accelerator-config
     config_path: composer.yaml
-    
 orchestration:
   dags:
     streaming_start: dataflow_streaming_start
@@ -144,17 +142,13 @@ archive:
   bucket: stream-accelerator-archive
   path_prefix: gs://stream-accelerator-archive/events
   format: json
-
 schema_management:
   enabled: true
-  scope: FULL_EVENT   # envelope + payload
+  scope: FULL_EVENT
   schema_name: json_event_v2
   schema_version: v2
-
   evolution_policy:
     on_new_field: ALLOW
     on_missing_field: WARN
     on_type_change: FAIL
-
   dlq_on_violation: true
-

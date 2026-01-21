@@ -24,7 +24,7 @@ gsutil cp config/transformation.yaml gs://$CONFIG_BUCKET/
 gsutil cp config/validation.yaml gs://$CONFIG_BUCKET/
 gsutil cp config/pipeline.yaml gs://$CONFIG_BUCKET/
 gsutil cp schemas/json_event_v2.json gs://stream-accelerator-config/schemas/json_event_v2.json
-
+gsutil cp config/composer.yaml gs://stream-accelerator-config/
 # -----------------------------
 # Create Dataflow Bucket
 # -----------------------------

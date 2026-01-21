@@ -73,9 +73,9 @@ def build_pipeline(p, cfg, subscription):
     if dedup_cfg.get("mode", "single") != "none":
         main = (
             main
-            | "DeduplicateLatest"
-            >> DeduplicateLatest(
-                buffer_seconds=dedup_cfg["buffer_seconds"],max_state_age_sec=dedup_cfg.get("max_state_age_sec",1800)
+            | "DeduplicateLatest" >> DeduplicateLatest(
+                buffer_seconds=dedup_cfg["buffer_seconds"],
+                max_state_age_sec=dedup_cfg.get("max_state_age_sec", 1800)
             )
         )
 
