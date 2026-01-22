@@ -3,6 +3,20 @@ import hashlib
 import json
 
 
+def _resolve_table(cfg):
+    dest = cfg["destination"]["target"]
+    project = dest["project"]
+    dataset = dest["dataset"]
+    table = dest["table"]
+
+    if cfg.get("job_mode") == "backfill":
+        run_id = cfg["backfill"]["run_id"]
+        return f"{project}:{dataset}.{table}_backfill_{run_id}"
+
+    return f"{project}:{dataset}.{table}"
+
+
+
 def _collect_destination_fields(dest_cfg, source_cfg, transform_cfg):
     fields = {
         "event_id": "STRING",
@@ -65,7 +79,7 @@ def write_bq(pcoll, cfg):
     dataset = dest["target"]["dataset"]
     table_name = dest["target"]["table"]
 
-    table = f"{project}:{dataset}.{table_name}"
+    table = _resolve_table(cfg)
 
     schema = {
         "fields": _collect_destination_fields(dest, cfg["source"], transforms)
@@ -79,7 +93,11 @@ def write_bq(pcoll, cfg):
         >> beam.io.WriteToBigQuery(
             table=table,
             schema=schema,
-            write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+            write_disposition=(
+                beam.io.BigQueryDisposition.WRITE_TRUNCATE
+                if cfg.get("job_mode") == "backfill"
+                else beam.io.BigQueryDisposition.WRITE_APPEND
+            ),
             create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
             method=beam.io.WriteToBigQuery.Method.STORAGE_WRITE_API,
             triggering_frequency=60,

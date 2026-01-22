@@ -2,6 +2,7 @@ from datetime import datetime
 import yaml
 import tempfile
 import time
+import logging
 
 from airflow import DAG
 from airflow.models import Variable
@@ -34,34 +35,48 @@ def load_pipeline_yaml(**context):
         cfg = yaml.safe_load(f)
 
     project_cfg = cfg["project"]
-    dataflow_cfg = cfg["dataflow"]
-    job_cfg = dataflow_cfg["job"]
+    job_cfg = cfg["dataflow"]["job"]
 
     return {
         "project_id": project_cfg["id"],
         "region": project_cfg["region"],
-        "template_path": dataflow_cfg["template"]["storage_path"],
+        "template_path": cfg["dataflow"]["template"]["storage_path"],
         "job_name_prefix": job_cfg["name_prefix"],
-        "parameters": job_cfg["parameters"],
+        "parameters": {k: str(v) for k, v in job_cfg["parameters"].items()},
         "service_account": (
             f"{cfg['service_account']['name']}"
             f"@{project_cfg['id']}.iam.gserviceaccount.com"
         ),
+        "num_workers": job_cfg.get("num_workers", 2),
+        "max_workers": job_cfg.get("max_workers", 10),
+        "machine_type": job_cfg.get("worker_machine_type", "n2-standard-2"),
+        "disk_size_gb": job_cfg.get("disk_size_gb", 30),
+        "enable_streaming_engine": job_cfg.get("enable_streaming_engine", True),
     }
 
 
 def find_existing_job(**context):
+    """
+    Find an active streaming job to drain.
+    """
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
 
-    hook = DataflowHook(location=cfg["region"])
-    jobs = hook.get_jobs(project_id=cfg["project_id"])
+    hook = DataflowHook()
+    client = hook.get_conn()
+
+    request = client.projects().locations().jobs().list(
+        projectId=cfg["project_id"],
+        location=cfg["region"],
+        filter="ACTIVE",
+    )
+    response = request.execute()
+    jobs = response.get("jobs", [])
 
     for job in jobs:
         if (
-            job["name"].startswith(cfg["job_name_prefix"])
-            and job["currentState"]
-            in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
+            job.get("name", "").startswith(cfg["job_name_prefix"])
+            and job.get("currentState") in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
         ):
             ti.xcom_push(key="job_id", value=job["id"])
             return "stop_existing_job"
@@ -71,29 +86,63 @@ def find_existing_job(**context):
 
 def wait_for_job_drained(**context):
     """
-    Poll Dataflow until the old streaming job reaches DRAINED.
+    Wait (bounded) until the old job is fully drained.
     """
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
     job_id = ti.xcom_pull(task_ids="find_existing_job", key="job_id")
 
-    hook = DataflowHook(location=cfg["region"])
+    hook = DataflowHook()
+    client = hook.get_conn()
 
-    while True:
-        job = hook.get_job(
-            project_id=cfg["project_id"],
-            job_id=job_id,
-        )
+    max_wait_seconds = 20 * 60  # 20 minutes
+    waited = 0
+
+    while waited < max_wait_seconds:
+        job = client.projects().locations().jobs().get(
+            projectId=cfg["project_id"],
+            location=cfg["region"],
+            jobId=job_id,
+        ).execute()
 
         state = job["currentState"]
+        logging.info("Old job %s state: %s", job_id, state)
 
         if state == "JOB_STATE_DRAINED":
             return
 
         if state in ("JOB_STATE_FAILED", "JOB_STATE_CANCELLED"):
-            raise RuntimeError(f"Job entered invalid state: {state}")
+            raise RuntimeError(f"Old job ended unexpectedly: {state}")
 
         time.sleep(30)
+        waited += 30
+
+    raise TimeoutError("Timed out waiting for job to drain")
+
+
+def build_flex_body(context, **_):
+    ti = context["ti"]
+    cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
+
+    return {
+        "launchParameter": {
+            "jobName": f"{cfg['job_name_prefix']}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "containerSpecGcsPath": cfg["template_path"],
+            "parameters": cfg["parameters"],
+            "environment": {
+                "serviceAccountEmail": cfg["service_account"],
+                "numWorkers": cfg["num_workers"],
+                "maxWorkers": cfg["max_workers"],
+                "machineType": cfg["machine_type"],
+                "diskSizeGb": cfg["disk_size_gb"],
+                "enableStreamingEngine": cfg["enable_streaming_engine"],
+                "additionalExperiments": [
+                    "use_runner_v2",
+                    "enable_vertical_autoscaling",
+                ],
+            },
+        }
+    }
 
 
 # ----------------------------------------------------
@@ -125,6 +174,7 @@ with DAG(
         project_id="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['project_id'] }}",
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
         job_id="{{ ti.xcom_pull(task_ids='find_existing_job', key='job_id') }}",
+        drain_pipeline=True,
     )
 
     wait_for_drain = PythonOperator(
@@ -136,30 +186,12 @@ with DAG(
         task_id="start_new_streaming_job",
         project_id="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['project_id'] }}",
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
-        body={
-            "launchParameter": {
-                "jobName": (
-                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['job_name_prefix'] }}"
-                    "-{{ ts_nodash }}"
-                ),
-                "containerSpecGcsPath": (
-                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['template_path'] }}"
-                ),
-                "parameters": (
-                    "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['parameters'] | tojson }}"
-                ),
-                "environment": {
-                    "serviceAccountEmail": (
-                        "{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['service_account'] }}"
-                    ),
-                },
-            }
-        },
+        trigger_rule="none_failed_min_one_success",
+        body=build_flex_body,
     )
 
     end = EmptyOperator(task_id="end")
 
-    # DAG graph
     start >> load_cfg >> find_job
     find_job >> stop_existing_job >> wait_for_drain >> start_new_streaming_job >> end
     find_job >> start_new_streaming_job >> end

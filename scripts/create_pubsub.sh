@@ -5,7 +5,8 @@ PROJECT_ID="stream-accelerator"
 
 gcloud pubsub topics create json-events-topic --project $PROJECT_ID || true
 gcloud pubsub topics create json-events-dlq --project $PROJECT_ID || true
-
+gcloud pubsub topics create json-events-backfill-dlq --project $PROJECT_ID || true
+# gcloud pubsub topics create json-events-backfill-dlq --project stream-accelerator || true
 gcloud pubsub subscriptions create json-events-sub \
   --project $PROJECT_ID \
   --topic=json-events-topic \
@@ -17,3 +18,11 @@ gcloud pubsub subscriptions create json-events-sub \
 gcloud pubsub subscriptions create json-events-dlq-sub \
   --project $PROJECT_ID \
   --topic=json-events-dlq || true
+
+gcloud pubsub subscriptions create json-events-backfill-dlq-sub \
+  --project $PROJECT_ID \
+  --topic=json-events-backfill-dlq || true
+
+# gcloud pubsub subscriptions create json-events-backfill-dlq-sub \
+#   --project stream-accelerator \
+#   --topic=json-events-backfill-dlq || true

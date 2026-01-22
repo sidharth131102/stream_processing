@@ -1,6 +1,7 @@
 from datetime import datetime
 import yaml
 import tempfile
+import logging
 
 from airflow import DAG
 from airflow.models import Variable
@@ -46,21 +47,34 @@ def load_pipeline_yaml(**context):
 
 def find_running_streaming_job(**context):
     """
-    Find a running streaming job matching the name prefix.
+    Find a RUNNING or DRAINING streaming job.
+    Fail CLOSED: if API fails, do nothing.
     """
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
 
-    hook = DataflowHook(
-        location=cfg["region"],
-    )
+    hook = DataflowHook()
+    client = hook.get_conn()
 
-    jobs = hook.get_jobs(project_id=cfg["project_id"])
+    try:
+        request = client.projects().locations().jobs().list(
+            projectId=cfg["project_id"],
+            location=cfg["region"],
+            filter="ACTIVE",
+        )
+        response = request.execute()
+        jobs = response.get("jobs", [])
+    except Exception as e:
+        logging.error(
+            "Failed to list Dataflow jobs, skipping stop. Error: %s",
+            e,
+        )
+        return "no_streaming_job_found"
 
     for job in jobs:
         if (
-            job["name"].startswith(cfg["job_name_prefix"])
-            and job["currentState"]
+            job.get("name", "").startswith(cfg["job_name_prefix"])
+            and job.get("currentState")
             in ("JOB_STATE_RUNNING", "JOB_STATE_DRAINING")
         ):
             ti.xcom_push(key="job_id", value=job["id"])
@@ -102,6 +116,7 @@ with DAG(
         project_id="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['project_id'] }}",
         location="{{ ti.xcom_pull(task_ids='load_pipeline_yaml')['region'] }}",
         job_id="{{ ti.xcom_pull(task_ids='find_running_streaming_job', key='job_id') }}",
+        drain_pipeline=True,  # ✅ CRITICAL for streaming correctness
     )
 
     end = EmptyOperator(task_id="end")

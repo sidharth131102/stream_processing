@@ -1,6 +1,7 @@
 import yaml
 import json
 from google.cloud import storage
+from datetime import datetime, timezone
 
 
 def load_all_configs(bucket: str):
@@ -32,6 +33,14 @@ def load_all_configs(bucket: str):
             raise FileNotFoundError(f"Missing schema file: {name}")
         return json.loads(blob.download_as_text())
 
+    def _load_backfill_yaml():
+        try:
+            return _load_yaml("backfill.yaml")
+        except FileNotFoundError:
+            return None
+
+    
+
 
     cfg = {
         "source": _load_yaml("source_mapping.yaml"),
@@ -43,7 +52,11 @@ def load_all_configs(bucket: str):
     for k, v in cfg.items():
         if not v:
             raise ValueError(f"Config '{k}' loaded as empty")
-
+    
+    backfill_cfg = _load_backfill_yaml()
+    if backfill_cfg:
+        cfg["backfill_yaml"] = backfill_cfg
+    
     pipeline_cfg = _load_yaml("pipeline.yaml")
     schema_cfg = pipeline_cfg.get("schema_management", {})
     if schema_cfg.get("enabled", False):

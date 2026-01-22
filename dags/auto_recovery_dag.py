@@ -1,6 +1,7 @@
 from datetime import datetime
 import yaml
 import tempfile
+import logging
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator, BranchPythonOperator
@@ -46,32 +47,50 @@ def check_dataflow_state(**context):
     """
     Determine whether a healthy streaming Dataflow job exists.
 
-    Logic:
-    - If at least ONE RUNNING job exists → healthy
-    - If only QUEUED / FAILED / CANCELLED jobs exist → recovery needed
-    - If no jobs exist → recovery needed
+    Healthy states:
+    - RUNNING
+    - STARTING
+    - DRAINING (rolling deploy in progress)
+
+    Fail CLOSED: if state cannot be determined, do nothing.
     """
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_config")
 
-    hook = DataflowHook(location=cfg["region"])
-    jobs = hook.get_jobs(project_id=cfg["project_id"])
+    hook = DataflowHook()
+    client = hook.get_conn()
 
-    # Filter jobs belonging to this pipeline
+    try:
+        request = client.projects().locations().jobs().list(
+            projectId=cfg["project_id"],
+            location=cfg["region"],
+            filter="ACTIVE",
+        )
+        response = request.execute()
+        jobs = response.get("jobs", [])
+    except Exception as e:
+        logging.error(
+            "Failed to query Dataflow jobs; skipping recovery. Error: %s",
+            e,
+        )
+        return "UNKNOWN"
+
     relevant_jobs = [
         job for job in jobs
-        if job["name"].startswith(cfg["job_prefix"])
+        if job.get("name", "").startswith(cfg["job_prefix"])
     ]
 
     if not relevant_jobs:
         return "NOT_RUNNING"
 
-    # Healthy condition: at least one RUNNING job
     for job in relevant_jobs:
-        if job["currentState"] == "JOB_STATE_RUNNING":
+        if job.get("currentState") in (
+            "JOB_STATE_RUNNING",
+            "JOB_STATE_STARTING",
+            "JOB_STATE_DRAINING",
+        ):
             return "RUNNING"
 
-    # No healthy job found
     return "NEEDS_RECOVERY"
 
 
@@ -93,7 +112,7 @@ def decide_recovery(**context):
 with DAG(
     dag_id=DAG_ID,
     start_date=START_DATE,
-    schedule_interval="*/5 * * * *",  # every 5 minutes
+    schedule_interval="*/5 * * * *",
     catchup=False,
     max_active_runs=1,
     tags=["dataflow", "recovery", "streaming"],
@@ -126,7 +145,6 @@ with DAG(
     do_nothing = EmptyOperator(task_id="do_nothing")
     end = EmptyOperator(task_id="end")
 
-    # DAG graph
     start >> load_cfg >> check_state >> decide
     decide >> trigger_restart >> end
     decide >> do_nothing >> end

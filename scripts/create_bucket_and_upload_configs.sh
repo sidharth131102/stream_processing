@@ -7,6 +7,7 @@ REGION="us-central1"
 # Buckets
 CONFIG_BUCKET="stream-accelerator-config"
 DATAFLOW_BUCKET="stream-accelerator-dataflow"
+ARCHIVE_BUCKET="stream-accelerator-archive"
 
 echo "Setting project..."
 gcloud config set project $PROJECT_ID
@@ -26,11 +27,13 @@ gsutil cp config/pipeline.yaml gs://$CONFIG_BUCKET/
 gsutil cp schemas/json_event_v2.json gs://stream-accelerator-config/schemas/json_event_v2.json
 gsutil cp config/composer.yaml gs://stream-accelerator-config/
 # -----------------------------
-# Create Dataflow Bucket
+# Create Dataflow AND Archive Bucket
 # -----------------------------
 echo "Creating Dataflow bucket..."
 gsutil mb -p $PROJECT_ID -l $REGION gs://$DATAFLOW_BUCKET || true
+gsutil mb -p $PROJECT_ID -l $REGION gs://$ARCHIVE_BUCKET || true
 
+# -----------------------------
 echo "Creating Dataflow folders..."
 gsutil mkdir gs://stream-accelerator-dataflow/staging || true
 gsutil mkdir gs://stream-accelerator-dataflow/temp || true

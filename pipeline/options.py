@@ -13,7 +13,7 @@ class CustomOptions(PipelineOptions):
         # Source
         parser.add_argument(
             "--subscription",
-            required=True,
+            required=False,
             help="Input Pub/Sub subscription"
         )
 
@@ -33,5 +33,7 @@ class CustomOptions(PipelineOptions):
         )
 
         # Backfill parameters (ignored for streaming)
-        parser.add_argument("--backfill_start_ts")
-        parser.add_argument("--backfill_end_ts")
+        parser.add_argument("--backfill_start_ts",required=False)
+        parser.add_argument("--backfill_end_ts",required=False)
+
+        

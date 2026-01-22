@@ -1,6 +1,6 @@
 {
-  "name": "JSON Streaming Accelerator",
-  "description": "Config-driven streaming accelerator for JSON events",
+  "name": "JSON Streaming & Backfill Accelerator",
+  "description": "Config-driven Dataflow accelerator supporting streaming and backfill",
   "parameters": [
     {
       "name": "subscription",
@@ -27,6 +27,20 @@
       "helpText": "Deployment environment (dev, staging, prod)",
       "paramType": "TEXT",
       "defaultValue": "dev"
+    },
+    {
+      "name": "backfill_start_ts",
+      "label": "Backfill Start Time",
+      "helpText": "ISO-8601 start timestamp for backfill window",
+      "paramType": "TEXT",
+      "isOptional": true
+    },
+    {
+      "name": "backfill_end_ts",
+      "label": "Backfill End Time",
+      "helpText": "ISO-8601 end timestamp for backfill window",
+      "paramType": "TEXT",
+      "isOptional": true  
     }
   ]
 }
