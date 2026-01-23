@@ -36,4 +36,9 @@ class CustomOptions(PipelineOptions):
         parser.add_argument("--backfill_start_ts",required=False)
         parser.add_argument("--backfill_end_ts",required=False)
 
-        
+        parser.add_argument(
+            "--path_pattern",
+            type=str,
+            required=False,
+            help="Resolved GCS path pattern for backfill"
+        )

@@ -14,94 +14,49 @@ from pipeline.graph_builder import build_pipeline
 
 
 
-def normalize_backfill_config(cfg: dict) -> dict:
-    backfill_yaml = cfg.get("backfill_yaml")
-    if not backfill_yaml:
-        raise ValueError("backfill.yaml is required for backfill mode")
-
-    source_cfg = backfill_yaml["source"]
-
-    start_ts = cfg["backfill"]["start_ts"]
-    end_ts = cfg["backfill"]["end_ts"]
-
-    start_dt = datetime.fromisoformat(
-        start_ts.replace("Z", "+00:00")
-    ).astimezone(timezone.utc)
-
-    end_dt = datetime.fromisoformat(
-        end_ts.replace("Z", "+00:00")
-    ).astimezone(timezone.utc)
-
-    if start_dt >= end_dt:
-        raise ValueError("Invalid backfill window: start_ts >= end_ts")
-
-    # ENRICH, don’t replace
-    cfg["backfill"].update({
-        "path_pattern": source_cfg["path_pattern"],
-        "event_time_field": source_cfg.get("event_time_field", "event_ts"),
-        "timezone": source_cfg.get("timezone", "UTC"),
-    })
-
-    return cfg
-
 
 def run():
     pipeline_options = PipelineOptions()
-
     custom = pipeline_options.view_as(CustomOptions)
-    job_mode = custom.job_mode
+
+    cfg = {
+        "job_mode": custom.job_mode
+    }
 
     # ----------------------------
-    # Inject job_mode EARLY
+    # Backfill runtime injection
     # ----------------------------
-    cfg = {"job_mode": job_mode}
+    if custom.job_mode == "backfill":
+        if not custom.backfill_start_ts or not custom.backfill_end_ts:
+            raise ValueError("Backfill requires start and end timestamps")
+
+        if not custom.path_pattern:
+            raise ValueError("Backfill requires --path_pattern")
+
+        cfg["backfill"] = {
+            "start_ts": custom.backfill_start_ts,
+            "end_ts": custom.backfill_end_ts,
+            "path_pattern": custom.path_pattern,
+        }
 
     # ----------------------------
-    # Validate backfill args EARLY
+    # Load static configs
     # ----------------------------
-    if job_mode == "backfill":
-        cfg["backfill"]["run_id"] = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        cfg = normalize_backfill_config(cfg)
-
-
-    # ----------------------------
-    # Load configs (GCS only)
-    # ----------------------------
-    if not custom.config_bucket:
-        raise ValueError("--config_bucket is required")
-
-    loaded_cfg = load_all_configs(bucket=custom.config_bucket)
-
-    # Merge loaded config INTO existing cfg
+    loaded_cfg = load_all_configs(custom.config_bucket)
     cfg.update(loaded_cfg)
-    if job_mode == "backfill":
-        cfg["backfill"]["run_id"] = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        cfg["backfill"] = normalize_backfill_config(cfg)
-    # ----------------------------
-    # Add backfill run_id (STEP 7.1)
-    # ----------------------------
-    
 
     logging.info(f"Final backfill config: {cfg.get('backfill')}")
-
-    # ----------------------------
-    # Pipeline options
-    # ---------------------------
 
     setup = pipeline_options.view_as(SetupOptions)
     setup.save_main_session = True
 
-
-
-    # ----------------------------
-    # Build pipeline
-    # ----------------------------
     with beam.Pipeline(options=pipeline_options) as p:
         build_pipeline(
             p,
             cfg,
             subscription=custom.subscription,
         )
+
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)

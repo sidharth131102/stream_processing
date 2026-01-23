@@ -28,6 +28,27 @@ START_DATE = datetime(2024, 1, 1)
 # --------------------------------------------------
 # Helper: Load configs
 # --------------------------------------------------
+def build_gcs_path_pattern(
+    bucket: str,
+    prefix: str,
+    start_time: str,
+    end_time: str,
+) -> str:
+    start = datetime.fromisoformat(start_time)
+    end = datetime.fromisoformat(end_time)
+
+    patterns = []
+    current = start
+
+    while current < end:
+        patterns.append(
+            f"gs://{bucket}/{prefix}/"
+            f"{current:%Y}/{current:%m}/{current:%d}/*.json"
+        )
+        current += timedelta(days=1)
+
+    return ",".join(patterns)
+
 def load_backfill_config(**context):
     dag_conf = context["dag_run"].conf or {}
     start_time = dag_conf.get("start_time")
@@ -57,8 +78,14 @@ def load_backfill_config(**context):
         for k, v in job_cfg["parameters"].items()
         if k not in ("subscription", "job_mode")
     }
+    path_pattern = build_gcs_path_pattern(
+    bucket=backfill_cfg["source"]["archive_bucket"],
+    prefix="events",
+    start_time=start_time,
+    end_time=end_time,
+    )
 
-    run_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+
     safety_cfg = backfill_cfg.get("safety", {})
 
     timeout_seconds = int(safety_cfg.get("dataflow_timeout_seconds", 6 * 60 * 60))
@@ -85,10 +112,9 @@ def load_backfill_config(**context):
             "job_mode": "backfill",
             "backfill_start_ts": start_time,
             "backfill_end_ts": end_time,
-            "backfill_run_id": run_id,
+            "path_pattern": path_pattern,
         },
 
-        "run_id": run_id,
         "dataflow_timeout_seconds": timeout_seconds,
 
         "target_dataset": backfill_cfg["sink"]["merge"]["target_dataset"],
