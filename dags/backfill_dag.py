@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime,timedelta
 import yaml
 import tempfile
 
@@ -61,9 +61,7 @@ def load_backfill_config(**context):
     run_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     safety_cfg = backfill_cfg.get("safety", {})
 
-    timeout_seconds = int(
-        safety_cfg.get("dataflow_timeout_seconds", 6 * 60 * 60)
-)
+    timeout_seconds = int(safety_cfg.get("dataflow_timeout_seconds", 6 * 60 * 60))
 
     return {
         "project_id": pipeline_cfg["project"]["id"],
@@ -217,9 +215,14 @@ with DAG(
         job_id="{{ ti.xcom_pull('start_backfill_dataflow')['id'] }}",
         expected_statuses={"JOB_STATE_DONE"},
         poke_interval=60,
-        timeout="{{ ti.xcom_pull('load_backfill_config')['dataflow_timeout_seconds'] }}",
-    )
 
+        # ✅ THIS *CAN* BE DYNAMIC
+        execution_timeout=timedelta(
+            seconds=int(
+                "{{ ti.xcom_pull('load_backfill_config')['dataflow_timeout_seconds'] }}"
+            )
+        ),
+    )
     fetch_columns = PythonOperator(
         task_id="fetch_target_columns",
         python_callable=fetch_target_columns,
