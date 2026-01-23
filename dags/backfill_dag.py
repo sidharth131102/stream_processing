@@ -80,7 +80,7 @@ def load_backfill_config(**context):
     }
     path_pattern = build_gcs_path_pattern(
     bucket=backfill_cfg["source"]["archive_bucket"],
-    prefix="events",
+    prefix=backfill_cfg["source"]["prefix"],
     start_time=start_time,
     end_time=end_time,
     )

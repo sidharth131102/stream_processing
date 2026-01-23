@@ -15,6 +15,7 @@ source:
   type: gcs
   format: json            # json | avro | parquet (future-proof)
   archive_bucket: stream-accelerator-archive
+  prefix: events
   path_pattern: >
     gs://stream-accelerator-archive/events/{yyyy}/{MM}/{dd}/*.json
   event_time_field: event_ts
