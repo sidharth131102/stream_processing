@@ -58,6 +58,15 @@ def load_all_configs(bucket: str):
         cfg["backfill_yaml"] = backfill_cfg
     
     pipeline_cfg = _load_yaml("pipeline.yaml")
+    # -------------------------------
+# Archive configuration
+# -------------------------------
+    archive_cfg = pipeline_cfg.get("archive")
+    if archive_cfg:
+        if not isinstance(archive_cfg, dict):
+            raise ValueError("archive must be a mapping in pipeline.yaml")
+        cfg["archive"] = archive_cfg
+
     schema_cfg = pipeline_cfg.get("schema_management", {})
     if schema_cfg.get("enabled", False):
         schema_name = schema_cfg["schema_name"]

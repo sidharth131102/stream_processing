@@ -67,7 +67,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v75
+    tag: v81
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -109,6 +109,7 @@ streaming_tuning:
     type: fixed
     window_size_sec: 60
     allowed_lateness_sec: 300
+    archive_window_sec: 60
   batching:
     bigquery:
       enabled: false

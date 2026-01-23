@@ -24,20 +24,26 @@ def normalize_backfill_config(cfg: dict) -> dict:
     start_ts = cfg["backfill"]["start_ts"]
     end_ts = cfg["backfill"]["end_ts"]
 
-    start_dt = datetime.fromisoformat(start_ts.replace("Z", "+00:00")).astimezone(timezone.utc)
-    end_dt = datetime.fromisoformat(end_ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+    start_dt = datetime.fromisoformat(
+        start_ts.replace("Z", "+00:00")
+    ).astimezone(timezone.utc)
+
+    end_dt = datetime.fromisoformat(
+        end_ts.replace("Z", "+00:00")
+    ).astimezone(timezone.utc)
 
     if start_dt >= end_dt:
         raise ValueError("Invalid backfill window: start_ts >= end_ts")
 
-    return {
+    # ENRICH, don’t replace
+    cfg["backfill"].update({
         "path_pattern": source_cfg["path_pattern"],
-        "start_ts": start_ts,
-        "end_ts": end_ts,
         "event_time_field": source_cfg.get("event_time_field", "event_ts"),
         "timezone": source_cfg.get("timezone", "UTC"),
-        "run_id": cfg["backfill"]["run_id"],
-    }
+    })
+
+    return cfg
+
 
 def run():
     pipeline_options = PipelineOptions()
@@ -54,15 +60,9 @@ def run():
     # Validate backfill args EARLY
     # ----------------------------
     if job_mode == "backfill":
-        if not custom.backfill_start_ts or not custom.backfill_end_ts:
-            raise ValueError(
-                "Backfill requires --backfill_start_ts and --backfill_end_ts"
-            )
+        cfg["backfill"]["run_id"] = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        cfg = normalize_backfill_config(cfg)
 
-        cfg["backfill"] = {
-            "start_ts": custom.backfill_start_ts,
-            "end_ts": custom.backfill_end_ts,
-        }
 
     # ----------------------------
     # Load configs (GCS only)
@@ -102,3 +102,7 @@ def run():
             cfg,
             subscription=custom.subscription,
         )
+
+if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.INFO)
+    run()

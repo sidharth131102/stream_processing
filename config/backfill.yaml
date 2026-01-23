@@ -105,6 +105,7 @@ safety:
   max_backfill_days: 7
   fail_if_target_table_missing: true
   require_window_parameters: true
+  dataflow_timeout_seconds: 21600
 
 # -------------------------------
 # Observability

@@ -1,29 +1,28 @@
 import apache_beam as beam
 import json
 from datetime import datetime, timezone
-from apache_beam.io.fileio import WriteToFiles
+from apache_beam.io.fileio import WriteToFiles, default_file_naming
 
 
 def _extract_date_partition(event: dict) -> str:
     """
-    Returns partition path like: yyyy/MM/dd
-    Based on event_ts (ISO-8601).
+    Partition by Pub/Sub publish time (RAW archive).
     """
-    ts = event.get("event_ts")
-    if not ts:
-        # Fallback: put in unknown bucket (never crash pipeline)
+    pubsub = event.get("_pubsub", {})
+    publish_time = pubsub.get("publish_time")
+
+    if not publish_time:
         return "unknown/unknown/unknown"
 
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+    dt = datetime.fromisoformat(
+        publish_time.replace("Z", "+00:00")
+    ).astimezone(timezone.utc)
+
     return f"{dt.year:04d}/{dt.month:02d}/{dt.day:02d}"
 
 
-class WriteRawArchive(beam.PTransform):
-    """
-    Writes raw events to GCS in time-partitioned folders:
-    gs://bucket/events/yyyy/MM/dd/*.json
-    """
 
+class WriteRawArchive(beam.PTransform):
     def __init__(self, archive_cfg: dict):
         self.bucket = archive_cfg["bucket"]
         self.prefix = archive_cfg.get("path_prefix", "events")
@@ -38,6 +37,6 @@ class WriteRawArchive(beam.PTransform):
                 destination=lambda json_str: _extract_date_partition(
                     json.loads(json_str)
                 ),
-                file_naming=WriteToFiles.default_file_naming(".json"),
+                file_naming=default_file_naming(".json"),
             )
         )

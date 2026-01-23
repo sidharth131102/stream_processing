@@ -4,17 +4,27 @@ import json
 
 
 def _resolve_table(cfg):
-    dest = cfg["destination"]["target"]
-    project = dest["project"]
-    dataset = dest["dataset"]
-    table = dest["table"]
+    dest = cfg["destination"]
+    project = dest["target"]["project"]
 
     if cfg.get("job_mode") == "backfill":
+        if "temp_table" not in dest:
+            raise ValueError(
+                "Backfill mode requires destination.temp_table configuration"
+            )
+
         run_id = cfg["backfill"]["run_id"]
-        return f"{project}:{dataset}.{table}_backfill_{run_id}"
+        dataset = dest["temp_table"]["dataset"]
+        prefix = dest["temp_table"]["table_prefix"]
 
-    return f"{project}:{dataset}.{table}"
+        return f"{project}:{dataset}.{prefix}_{run_id}"
 
+    # Streaming (or default)
+    return (
+        f"{project}:"
+        f"{dest['target']['dataset']}."
+        f"{dest['target']['table']}"
+    )
 
 
 def _collect_destination_fields(dest_cfg, source_cfg, transform_cfg):
@@ -24,7 +34,7 @@ def _collect_destination_fields(dest_cfg, source_cfg, transform_cfg):
         "event_source": "STRING",
         "event_ts": "STRING",
         "event_timestamp": "FLOAT64",
-        "row_id": "STRING",  # business-level idempotency key
+        "row_id": "STRING",
     }
 
     for name, bq_type in dest_cfg.get("envelope_fields", {}).items():
@@ -51,10 +61,6 @@ def _collect_destination_fields(dest_cfg, source_cfg, transform_cfg):
 
 
 def _with_row_id(row):
-    """
-    Deterministic business row id.
-    (NOT used for BQ dedup when using Storage Write API)
-    """
     stable = {
         "event_id": row.get("event_id"),
         "event_ts": row.get("event_ts"),
@@ -75,31 +81,35 @@ def write_bq(pcoll, cfg):
     dest = cfg["destination"]
     transforms = cfg["transformations"]
 
-    project = dest["target"]["project"]
-    dataset = dest["target"]["dataset"]
-    table_name = dest["target"]["table"]
-
     table = _resolve_table(cfg)
 
     schema = {
         "fields": _collect_destination_fields(dest, cfg["source"], transforms)
     }
 
+    # ----------------------------
+    # Mode-aware write config
+    # ----------------------------
+    write_kwargs = {
+        "table": table,
+        "schema": schema,
+        "create_disposition": beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+        "method": beam.io.WriteToBigQuery.Method.STORAGE_WRITE_API,
+    }
+
+    if cfg.get("job_mode") == "backfill":
+        write_kwargs.update({
+            "write_disposition": beam.io.BigQueryDisposition.WRITE_TRUNCATE,
+        })
+    else:
+        write_kwargs.update({
+            "write_disposition": beam.io.BigQueryDisposition.WRITE_APPEND,
+            "triggering_frequency": 60,  # streaming only
+        })
+
     (
         pcoll
         | "NormalizeRows" >> beam.FlatMap(_normalize_rows)
         | "AddRowId" >> beam.Map(_with_row_id)
-        | "WriteBQ"
-        >> beam.io.WriteToBigQuery(
-            table=table,
-            schema=schema,
-            write_disposition=(
-                beam.io.BigQueryDisposition.WRITE_TRUNCATE
-                if cfg.get("job_mode") == "backfill"
-                else beam.io.BigQueryDisposition.WRITE_APPEND
-            ),
-            create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
-            method=beam.io.WriteToBigQuery.Method.STORAGE_WRITE_API,
-            triggering_frequency=60,
-        )
+        | "WriteBQ" >> beam.io.WriteToBigQuery(**write_kwargs)
     )

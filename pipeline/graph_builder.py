@@ -35,10 +35,20 @@ def build_pipeline(p, cfg, subscription):
     main = preprocess.main
     preprocess_dlq = preprocess.dlq
     if (
-        cfg.get("job_mode") == "streaming"
-        and cfg.get("archive", {}).get("enabled", False)
+    cfg.get("job_mode") == "streaming"
+    and cfg.get("archive", {}).get("enabled", False)
     ):
-        main | "WriteRawArchive" >> WriteRawArchive(cfg["archive"])
+        (
+            main
+            | "ArchiveWindow"
+            >> beam.WindowInto(
+                beam.window.FixedWindows(
+                    streaming["windowing"].get("archive_window_sec", 60)
+                )
+            )
+            | "WriteRawArchive"
+            >> WriteRawArchive(cfg["archive"])
+        )
     # ==================================================
     # 2️⃣ Envelope + Parse + Assign Event Time
     # ==================================================
@@ -93,7 +103,12 @@ def build_pipeline(p, cfg, subscription):
 
     elif cfg.get("job_mode") == "backfill":
         # Batch-safe dedup (NO STATE, NO TIMERS)
-        main = main | "BatchDeduplicateLatest" >> BatchDeduplicateLatest()
+        main = (
+        main
+        | "EnsureBounded" >> beam.Reshuffle()  # defensive, optional
+        | "BatchDeduplicateLatest"
+        >> BatchDeduplicateLatest()
+        )
 
 
     # ==================================================
