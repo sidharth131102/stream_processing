@@ -144,6 +144,13 @@ def fetch_target_columns(**context):
 
     context["ti"].xcom_push(key="columns", value=columns)
 
+def enforce_timeout(**context):
+    cfg = context["ti"].xcom_pull(task_ids="load_backfill_config")
+    timeout = cfg["dataflow_timeout_seconds"]
+
+    if timeout <= 0:
+        raise ValueError("Invalid dataflow_timeout_seconds")
+    
 
 # --------------------------------------------------
 # Helper: Generate MERGE SQL dynamically
@@ -200,6 +207,11 @@ with DAG(
         task_id="load_backfill_config",
         python_callable=load_backfill_config,
     )
+    
+    validate_timeout = PythonOperator(
+    task_id="validate_backfill_timeout",
+    python_callable=enforce_timeout,
+    )
 
     start_backfill = DataflowStartFlexTemplateOperator(
         task_id="start_backfill_dataflow",
@@ -217,11 +229,8 @@ with DAG(
         poke_interval=60,
 
         # ✅ THIS *CAN* BE DYNAMIC
-        execution_timeout=timedelta(
-            seconds=int(
-                "{{ ti.xcom_pull('load_backfill_config')['dataflow_timeout_seconds'] }}"
-            )
-        ),
+        execution_timeout=timedelta(hours=24),
+        
     )
     fetch_columns = PythonOperator(
         task_id="fetch_target_columns",
@@ -249,6 +258,7 @@ with DAG(
     (
         start
         >> load_cfg
+        >> validate_timeout
         >> start_backfill
         >> wait_for_backfill
         >> fetch_columns
