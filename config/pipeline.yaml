@@ -67,7 +67,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v81
+    tag: v82
     dockerfile: docker/Dockerfile
     context: .
 dataflow:

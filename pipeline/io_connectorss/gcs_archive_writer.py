@@ -6,19 +6,24 @@ from apache_beam.io.fileio import WriteToFiles, default_file_naming
 
 def _extract_date_partition(event: dict) -> str:
     """
-    Partition by Pub/Sub publish time (RAW archive).
+    Partition by event_ts (event time).
+    Expected ISO-8601 string, e.g. 2026-01-14T06:31:10Z
     """
-    pubsub = event.get("_pubsub", {})
-    publish_time = pubsub.get("publish_time")
+    event_ts = event.get("event_ts")
 
-    if not publish_time:
-        return "unknown/unknown/unknown"
+    if not event_ts:
+        return "unknown/unknown/unknown/part"
 
-    dt = datetime.fromisoformat(
-        publish_time.replace("Z", "+00:00")
-    ).astimezone(timezone.utc)
+    try:
+        dt = datetime.fromisoformat(
+            event_ts.replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+    except Exception:
+        return "invalid/invalid/invalid/part"
 
-    return f"{dt.year:04d}/{dt.month:02d}/{dt.day:02d}"
+    # IMPORTANT: return a PATH, not just a key
+    return f"{dt.year:04d}/{dt.month:02d}/{dt.day:02d}/part"
+
 
 
 
