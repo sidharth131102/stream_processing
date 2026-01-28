@@ -1,0 +1,22 @@
+{
+  "displayName": "Dataflow – Worker Saturation",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "CPU utilization > 80%",
+      "conditionThreshold": {
+        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/cpu_utilization\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.8,
+        "duration": "600s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_MEAN"
+          }
+        ]
+      }
+    }
+  ],
+  "enabled": true
+}

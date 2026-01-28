@@ -1,0 +1,22 @@
+{
+  "displayName": "Dataflow – High Stage Error Rate",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Stage errors > 10 per minute",
+      "conditionThreshold": {
+        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=starts_with(\"stage_errors\")",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 10,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "enabled": true
+}

@@ -7,6 +7,11 @@ from pipeline.schema.schema_utils import (
     has_schema_changed,
 )
 
+# ✅ ADD
+import logging
+import json
+from pipeline.observability.metrics import PipelineMetrics
+
 
 class SchemaGuard(beam.DoFn):
     """
@@ -42,7 +47,19 @@ class SchemaGuard(beam.DoFn):
         # 🚨 Schema evolution detected
         self.evolution_detected.inc()
 
-        # Always allow event to continue (detection-only mode)
+        # ✅ ADD: STAGE ERROR METRIC (NON-BLOCKING)
+        PipelineMetrics.stage_error("schema").inc()
+
+        # ✅ ADD: STRUCTURED LOGGING
+        logging.warning(json.dumps({
+            "severity": "WARNING",
+            "stage": "schema",
+            "type": "SCHEMA_EVOLUTION",
+            "event_id": event.get("event_id"),
+            "schema_version": self.cfg.get("schema_version"),
+        }))
+
+        # Always allow event to continue
         yield event
 
         # Emit schema evolution record

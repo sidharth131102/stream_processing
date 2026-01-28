@@ -53,6 +53,8 @@ composer:
       - roles/storage.objectAdmin
       - roles/bigquery.jobUser
       - roles/bigquery.dataViewer
+      - roles/bigquery.dataEditor
+      - roles/iam.serviceAccountUser
 
   # --------------------------------------------------
   # Composer Service Agent (v3 requirement)

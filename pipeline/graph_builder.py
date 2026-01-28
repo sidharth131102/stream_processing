@@ -17,6 +17,12 @@ from pipeline.observability.trackers import TrackInput, TrackOutput
 from pipeline.observability.lag import TrackEventLag
 from pipeline.schema.schema_guard import SchemaGuard
 from pipeline.io_connectorss.source_factory import read_source
+from apache_beam.transforms.trigger import (
+    AfterWatermark,AfterProcessingTime,
+    Repeatedly,
+    AccumulationMode,
+)
+from apache_beam.transforms.window import FixedWindows
 
 def build_pipeline(p, cfg, subscription):
     logging.info(f"PIPELINE MODE = {cfg.get('job_mode')}")
@@ -34,21 +40,9 @@ def build_pipeline(p, cfg, subscription):
 
     main = preprocess.main
     preprocess_dlq = preprocess.dlq
-    if (
-    cfg.get("job_mode") == "streaming"
-    and cfg.get("archive", {}).get("enabled", False)
-    ):
-        (
-            main
-            | "ArchiveWindow"
-            >> beam.WindowInto(
-                beam.window.FixedWindows(
-                    streaming["windowing"].get("archive_window_sec", 60)
-                )
-            )
-            | "WriteRawArchive"
-            >> WriteRawArchive(cfg["archive"])
-        )
+
+
+
     # ==================================================
     # 2️⃣ Envelope + Parse + Assign Event Time
     # ==================================================
@@ -81,7 +75,20 @@ def build_pipeline(p, cfg, subscription):
 
     main = parsed_with_time.main
     event_time_dlq = parsed_with_time.dlq
-    
+    if cfg.get("archive", {}).get("enabled", False) and cfg.get("job_mode") == "streaming":
+        (
+            main
+            | "ForceProcessingTime" >> beam.Map(lambda e: e)
+            | "ArchiveFlushWindow"
+            >> beam.WindowInto(
+                FixedWindows(30),
+                trigger=Repeatedly(AfterProcessingTime(30)),
+                accumulation_mode=AccumulationMode.DISCARDING,
+                allowed_lateness=0,
+            )
+            | "WriteRawArchive"
+            >> WriteRawArchive(cfg["archive"])
+        )
     if cfg.get("job_mode") == "streaming":
         main = main | "TrackEventLag" >> beam.ParDo(TrackEventLag())
 

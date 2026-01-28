@@ -50,3 +50,39 @@ gcloud iam service-accounts create $CSA_NAME \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$CSA_EMAIL" \
   --role="roles/composer.worker"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/iam.ServiceAccountUser"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/dataflow.worker"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/pubsub.subscriber"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/bigquery.dataEditor"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/storage.objectAdmin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/bigquery.jobUser"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/artifactregistry.reader"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/bigquery.dataEditor"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CSA_EMAIL" \
+  --role="roles/pubsub.viewer"

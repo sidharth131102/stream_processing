@@ -42,3 +42,4 @@ gsutil mkdir gs://stream-accelerator-dataflow/templates || true
 
 echo "✅ Buckets and configs ready"
 
+gsutil mb -p $PROJECT_ID -l us-central1 gs://stream-accelerator-archive || true

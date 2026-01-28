@@ -1,0 +1,22 @@
+{
+  "displayName": "Dataflow – High DLQ Flow",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "DLQ events > 5 per minute",
+      "conditionThreshold": {
+        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_total\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 5,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "enabled": true
+}

@@ -101,7 +101,6 @@ def check_existing_streaming_job(**context):
 
     return "start_streaming_job"
 
-
 def build_flex_template_body(context, **_):
     """
     Constructs the API body for the Flex Template launch.
@@ -110,6 +109,39 @@ def build_flex_template_body(context, **_):
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
 
+    # -------------------------------
+    # Base environment (existing)
+    # -------------------------------
+    environment = {
+        "serviceAccountEmail": cfg["service_account"],
+        "numWorkers": cfg["num_workers"],
+        "maxWorkers": cfg["max_workers"],
+        "machineType": cfg["machine_type"],
+        "diskSizeGb": cfg["disk_size_gb"],
+        "enableStreamingEngine": cfg["enable_streaming_engine"],
+        "stagingLocation": cfg["staging_location"],
+        "tempLocation": cfg["temp_location"],
+        "additionalExperiments": [
+            "use_runner_v2",
+            "enable_vertical_autoscaling",
+        ],
+    }
+
+    # -------------------------------------------------
+    # ✅ ADD THIS BLOCK: CMEK support (config-driven)
+    # -------------------------------------------------
+    security_cfg = cfg.get("security", {}).get("cmek", {})
+
+    if security_cfg.get("enabled"):
+        environment["kmsKeyName"] = security_cfg["key_name"]
+        logging.info(
+            "Launching Dataflow job with CMEK: %s",
+            security_cfg["key_name"],
+        )
+
+    # -------------------------------
+    # Final request body
+    # -------------------------------
     return {
         "launchParameter": {
             "jobName": (
@@ -118,23 +150,10 @@ def build_flex_template_body(context, **_):
             ),
             "containerSpecGcsPath": cfg["template_path"],
             "parameters": cfg["parameters"],
-            "environment": {
-                "serviceAccountEmail": cfg["service_account"],
-                "numWorkers": cfg["num_workers"],
-                "maxWorkers": cfg["max_workers"],
-                "machineType": cfg["machine_type"],
-                "diskSizeGb": cfg["disk_size_gb"],
-                "enableStreamingEngine": cfg["enable_streaming_engine"],
-                # FIX: Explicitly set staging paths in the environment block
-                "stagingLocation": cfg["staging_location"],
-                "tempLocation": cfg["temp_location"],
-                "additionalExperiments": [
-                    "use_runner_v2",
-                    "enable_vertical_autoscaling",
-                ],
-            },
+            "environment": environment,
         }
     }
+
 
 
 # ----------------------------------------------------

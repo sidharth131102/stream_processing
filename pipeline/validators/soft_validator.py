@@ -1,6 +1,12 @@
 import apache_beam as beam
 from datetime import datetime
 
+# ✅ ADD
+import logging
+import json
+from pipeline.observability.metrics import PipelineMetrics
+
+
 class SoftValidate(beam.DoFn):
     def __init__(self, validation_cfg):
         self.cfg = validation_cfg
@@ -14,7 +20,6 @@ class SoftValidate(beam.DoFn):
                 errors.append(f"Missing required field: {field}")
 
         # 2️⃣ Required payload fields (FIXED: Check root level after FieldMapper flattening)
-        # payload was deleted by FieldMapper, so check flattened fields at root
         for field in self.cfg.get("payload_required_fields", []):
             if field not in event or event[field] in (None, ""):
                 errors.append(f"Missing required payload field: {field}")
@@ -26,7 +31,6 @@ class SoftValidate(beam.DoFn):
                 errors.append("event_ts must be a STRING (ISO-8601)")
             else:
                 try:
-                    # Accept Z or offset formats
                     ts = event_ts.replace("Z", "+00:00")
                     datetime.fromisoformat(ts)
                 except Exception:
@@ -54,6 +58,18 @@ class SoftValidate(beam.DoFn):
 
         # 6️⃣ Route output
         if errors:
+            # ✅ ADD: METRICS
+            PipelineMetrics.validation_errors.inc()
+            PipelineMetrics.stage_error("validation").inc()
+
+            # ✅ ADD: STRUCTURED LOGGING
+            logging.warning(json.dumps({
+                "severity": "WARNING",
+                "stage": "validation",
+                "errors": errors,
+                "event_id": event.get("event_id"),
+            }))
+
             yield beam.pvalue.TaggedOutput(
                 "dlq",
                 {

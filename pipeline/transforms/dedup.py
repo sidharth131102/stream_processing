@@ -64,6 +64,10 @@ class _BufferedDedupDoFn(beam.DoFn):
             timer.set(time.time() + self.buffer_seconds)
         else:
             PipelineMetrics.dedup_dropped.inc()
+            yield beam.pvalue.TaggedOutput(
+                "dropped",
+                None
+            )
 
     @on_timer(emit_timer)
     def emit_final(
@@ -101,5 +105,5 @@ class DeduplicateLatest(beam.PTransform):
                     buffer_seconds=self.buffer_seconds,
                     max_state_age_sec=self.max_state_age_sec,
                 )
-            )
+            ).with_outputs("dropped", main="main")
         )

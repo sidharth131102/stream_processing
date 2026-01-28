@@ -10,6 +10,10 @@ from pipeline.transforms.business_rules import BusinessRules
 from pipeline.transforms.enrichment import Enrichment
 from pipeline.transforms.entity_extractor import EntityExtractor
 
+# ✅ ADD
+from pipeline.observability.metrics import PipelineMetrics
+
+
 class TransformationEngine(beam.DoFn):
     def __init__(self, cfg):
         self.mapper = FieldMapper(cfg.get("field_mapping", {}))
@@ -30,7 +34,19 @@ class TransformationEngine(beam.DoFn):
         if isinstance(event, str):
             try:
                 event = json.loads(event)
-            except:
+            except Exception as e:
+                # ✅ ADD: METRICS
+                PipelineMetrics.transform_errors.inc()
+                PipelineMetrics.stage_error("transform").inc()
+
+                # ✅ ADD: STRUCTURED LOGGING
+                logging.error(json.dumps({
+                    "severity": "ERROR",
+                    "stage": "transform",
+                    "error": "Invalid JSON string in transformation",
+                }))
+
+                # 🔒 EXISTING LOGIC (UNCHANGED)
                 logging.error(f"❌ Invalid JSON: {str(original_event)[:100]}")
                 yield beam.pvalue.TaggedOutput("dlq", {
                     "error": "Invalid JSON string in transformation",
@@ -40,6 +56,18 @@ class TransformationEngine(beam.DoFn):
         
         # 3. Final dict validation
         if not isinstance(event, dict):
+            # ✅ ADD: METRICS
+            PipelineMetrics.transform_errors.inc()
+            PipelineMetrics.stage_error("transform").inc()
+
+            # ✅ ADD: STRUCTURED LOGGING
+            logging.error(json.dumps({
+                "severity": "ERROR",
+                "stage": "transform",
+                "error": f"Expected dict, got {type(event)}",
+            }))
+
+            # 🔒 EXISTING LOGIC (UNCHANGED)
             logging.error(f"❌ Not dict: type={type(event)}")
             yield beam.pvalue.TaggedOutput("dlq", {
                 "error": f"Expected dict, got {type(event)}",
@@ -56,7 +84,20 @@ class TransformationEngine(beam.DoFn):
             event = self.entities.apply(event)
             logging.info(f"✅ Transform output: {list(event.keys())}")
             yield event
+
         except Exception as e:
+            # ✅ ADD: METRICS
+            PipelineMetrics.transform_errors.inc()
+            PipelineMetrics.stage_error("transform").inc()
+
+            # ✅ ADD: STRUCTURED LOGGING
+            logging.error(json.dumps({
+                "severity": "ERROR",
+                "stage": "transform",
+                "error": str(e),
+            }))
+
+            # 🔒 EXISTING LOGIC (UNCHANGED)
             logging.error(f"❌ Transform failed: {str(e)}")
             yield beam.pvalue.TaggedOutput("dlq", {
                 "error": f"Transformation failed: {str(e)}",

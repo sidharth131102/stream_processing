@@ -1,0 +1,177 @@
+{
+  "displayName": "Stream Event Processing – Observability",
+  "gridLayout": {
+    "columns": 2,
+    "widgets": [
+
+      {
+        "title": "Throughput – Events In vs Out (events/sec)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "Events In",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_in\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            },
+            {
+              "legendTemplate": "Events Out",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_out\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      {
+        "title": "End-to-End Latency (Event Lag – p95 ms)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "p95 Event Lag",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"event_lag_ms_MAX\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_MAX"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      {
+        "title": "Deduplication – Rate (events/sec)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "Seen",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_seen\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            },
+            {
+              "legendTemplate": "Emitted",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_emitted\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            },
+            {
+              "legendTemplate": "Dropped",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_dropped\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      {
+        "title": "Errors by Pipeline Stage (rate)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "{{metric.labels.metric_name}}",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=starts_with(\"stage_errors\")",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      {
+        "title": "DLQ Volume (events/sec)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "DLQ Events",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=\"events_total\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_SUM"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      {
+        "title": "Dataflow Job Health",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "Workers",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/current_num_workers\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  }
+                }
+              }
+            },
+            {
+              "legendTemplate": "CPU Utilization",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/cpu_utilization\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+
+    ]
+  }
+}

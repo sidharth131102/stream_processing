@@ -3,6 +3,10 @@ import json
 import base64
 from apache_beam.io.gcp.pubsub import PubsubMessage
 
+# ✅ ADD
+import logging
+from pipeline.observability.metrics import PipelineMetrics
+
 REQUIRED_FIELDS = [
     "event_id",
     "event_type",
@@ -48,12 +52,11 @@ class PreProcess(beam.DoFn):
                     event = json.loads(
                         base64.b64decode(element_str).decode("utf-8")
                     )
+
             if "payload" in event:
                 if isinstance(event["payload"], dict):
-                    # Message 1 path: convert dict to JSON string to match schema
                     event["payload"] = json.dumps(event["payload"])
                 elif isinstance(event["payload"], str):
-                    # Message 2 path: already a string, keep it as is
                     pass
 
             if pubsub_meta:
@@ -65,10 +68,23 @@ class PreProcess(beam.DoFn):
                 if not isinstance(event, dict):
                     raise RuntimeError(
                         f"PreProcess must emit dict, got {type(event)}"
-                )
+                    )
+
             yield event
 
         except Exception as e:
+            # ✅ ADD: METRICS
+            PipelineMetrics.stage_error("preprocess").inc()
+            PipelineMetrics.parse_errors.inc()
+
+            # ✅ ADD: STRUCTURED LOGGING
+            logging.error(json.dumps({
+                "severity": "ERROR",
+                "stage": "preprocess",
+                "error": str(e),
+                "raw": str(element)[:500],
+            }))
+
             yield beam.pvalue.TaggedOutput(
                 "dlq",
                 {

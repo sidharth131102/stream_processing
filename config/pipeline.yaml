@@ -2,6 +2,43 @@ project:
   id: stream-accelerator
   region: us-central1
   location: us-central1
+apis:
+- dataflow.googleapis.com
+- pubsub.googleapis.com
+- bigquery.googleapis.com
+- storage.googleapis.com
+- logging.googleapis.com
+- composer.googleapis.com
+- monitoring.googleapis.com
+- artifactregistry.googleapis.com
+- iam.googleapis.com
+- cloudresourcemanager.googleapis.com
+vpc_sc:
+  enabled: false
+  mode: dry_run
+  perimeter_name: stream-accelerator-perimeter
+  access_context:
+    policy_id: null
+  restricted_services:
+  - storage.googleapis.com
+  - bigquery.googleapis.com
+  - pubsub.googleapis.com
+  - dataflow.googleapis.com
+  - artifactregistry.googleapis.com
+  - composer.googleapis.com
+  resources:
+    projects:
+    - stream-accelerator
+  perimeter_type: REGULAR
+  dry_run:
+    enabled: true
+    violations_log_only: true
+  ingress_rules:
+    allowed_identities: []
+    allowed_resources: []
+  egress_rules:
+    allowed_services: []
+    allowed_identities: []
 service_account:
   name: dataflow-stream-sa
   display_name: Dataflow Streaming Service Account (Dev)
@@ -27,24 +64,56 @@ storage:
       destination: transformation.yaml
     - source: config/validation.yaml
       destination: validation.yaml
+    - source: config/pipeline.yaml
+      destination: pipeline.yaml
+    - source: config/composer.yaml
+      destination: composer.yaml
+    vpc_sc:
+      protected: true
+      allow_public_access: false
   - name: stream-accelerator-dataflow
     description: Dataflow job artifacts
     folders:
     - staging
     - temp
     - templates
+    vpc_sc:
+      protected: true
+  - name: stream-accelerator-archive
+    description: Archived raw events
+    folders:
+    - events
+    vpc_sc:
+      protected: true
+pipeline_configs:
+  config_directory: config
+  bucket: stream-accelerator-config
+  files:
+  - source_mapping.yaml
+  - destination_mapping.yaml
+  - transformation.yaml
+  - validation.yaml
 pubsub:
   schemas:
   - name: json_event_v2
     type: avro
     definition_file: schemas/json_event_v2.avsc
+    payload_schema_file: schemas/json_event_v2.json
   topics:
   - name: json-events-topic
     description: Main events ingestion topic
     schema: json_event_v2
     message_encoding: json
+    vpc_sc:
+      protected: true
   - name: json-events-dlq
     description: Dead letter queue topic
+    vpc_sc:
+      protected: true
+  - name: json-events-backfill-dlq
+    description: Backfill dead letter queue topic
+    vpc_sc:
+      protected: true
   subscriptions:
   - name: json-events-sub
     topic: json-events-topic
@@ -54,11 +123,16 @@ pubsub:
   - name: json-events-dlq-sub
     topic: json-events-dlq
     ack_deadline: 60
+  - name: json-events-backfill-dlq-sub
+    topic: json-events-backfill-dlq
+    ack_deadline: 60
 bigquery:
   datasets:
   - name: analytics
     description: Analytics dataset for processed events
     location: us-central1
+    vpc_sc:
+      protected: true
     tables:
     - name: service_requests
 docker:
@@ -67,7 +141,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v82
+    tag: v125
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -115,14 +189,6 @@ streaming_tuning:
       enabled: false
       min_batch_size: 200
       max_batch_size: 1000
-pipeline_configs:
-  config_directory: config
-  bucket: stream-accelerator-config
-  files:
-  - source_mapping.yaml
-  - destination_mapping.yaml
-  - transformation.yaml
-  - validation.yaml
 deployment:
   auto_increment_version: true
   cleanup_old_images: true
@@ -154,3 +220,12 @@ schema_management:
     on_missing_field: WARN
     on_type_change: FAIL
   dlq_on_violation: true
+observability:
+  alerts:
+    enabled: true
+    email:
+      address: yourname@example.com
+security:
+  cmek:
+    enabled: false
+    key_name: projects/PROJECT/locations/REGION/keyRings/RING/cryptoKeys/KEY
