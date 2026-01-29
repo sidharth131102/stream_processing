@@ -1,5 +1,5 @@
 target:
-  project: stream-accelerator
+  project: stream-accelerator-2
   dataset: analytics
   table: service_requests
 

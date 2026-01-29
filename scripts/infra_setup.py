@@ -152,6 +152,35 @@ def register_schema(schema: dict):
     ], check=False)
 
 
+def ensure_artifact_registry(
+    project_id: str,
+    location: str,
+    repository: str,
+    description: str = "Dataflow accelerator images"
+):
+    """
+    Ensure Artifact Registry Docker repository exists.
+    Idempotent: safe to re-run.
+    """
+    try:
+        # Check if repo exists
+        run_capture([
+            "gcloud", "artifacts", "repositories", "describe",
+            repository,
+            "--project", project_id,
+            "--location", location,
+        ])
+        print(f"✔ Artifact Registry exists: {repository}")
+    except subprocess.CalledProcessError:
+        run([
+            "gcloud", "artifacts", "repositories", "create", repository,
+            "--project", project_id,
+            "--repository-format", "docker",
+            "--location", location,
+            "--description", description,
+        ])
+        print(f"✔ Created Artifact Registry: {repository}")
+
 # --------------------------------------------------
 # BigQuery
 # --------------------------------------------------
@@ -316,6 +345,17 @@ def main():
 
     for sub in cfg["pubsub"]["subscriptions"]:
         create_subscription(sub)
+
+    docker_cfg = cfg.get("docker", {}).get("registry", {})
+
+    if docker_cfg:
+        ensure_artifact_registry(
+            project_id=project_id,
+            location=docker_cfg["location"],
+            repository=docker_cfg["repository"],
+        )
+
+
 
     # --------------------------------------------------
     # BigQuery

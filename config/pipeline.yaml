@@ -1,5 +1,5 @@
 project:
-  id: stream-accelerator
+  id: stream-accelerator-2
   region: us-central1
   location: us-central1
 apis:
@@ -28,7 +28,7 @@ vpc_sc:
   - composer.googleapis.com
   resources:
     projects:
-    - stream-accelerator
+    - stream-accelerator-2
   perimeter_type: REGULAR
   dry_run:
     enabled: true
@@ -93,6 +93,9 @@ pipeline_configs:
   - destination_mapping.yaml
   - transformation.yaml
   - validation.yaml
+  - composer.yaml
+  - pipeline.yaml
+  - backfill.yaml
 pubsub:
   schemas:
   - name: json_event_v2

@@ -14,8 +14,8 @@
 # --------------------------------------------------
 
 project:
-  id: stream-accelerator
-  number: 821481445086
+  id: stream-accelerator-2
+  number: 529975900001
 
 composer:
   environment:
@@ -60,7 +60,7 @@ composer:
   # Composer Service Agent (v3 requirement)
   # --------------------------------------------------
   service_agent:
-    email: service-821481445086@cloudcomposer-accounts.iam.gserviceaccount.com
+    email: service-529975900001@cloudcomposer-accounts.iam.gserviceaccount.com
     roles:
       - roles/composer.ServiceAgentV2Ext
 
