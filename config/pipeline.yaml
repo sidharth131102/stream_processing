@@ -16,7 +16,7 @@ apis:
 vpc_sc:
   enabled: false
   mode: dry_run
-  perimeter_name: stream-accelerator-perimeter
+  perimeter_name: stream-accelerator-2-perimeter
   access_context:
     policy_id: null
   restricted_services:
@@ -51,9 +51,10 @@ service_account:
   - roles/bigquery.jobUser
   - roles/storage.objectAdmin
   - roles/artifactregistry.reader
+  - roles/dataflow.worker
 storage:
   buckets:
-  - name: stream-accelerator-config
+  - name: stream-accelerator-2-config
     description: Configuration files storage
     files:
     - source: config/source_mapping.yaml
@@ -68,10 +69,12 @@ storage:
       destination: pipeline.yaml
     - source: config/composer.yaml
       destination: composer.yaml
+    - source: config/backfill.yaml
+      destination: backfill.yaml
     vpc_sc:
       protected: true
       allow_public_access: false
-  - name: stream-accelerator-dataflow
+  - name: stream-accelerator-2-dataflow
     description: Dataflow job artifacts
     folders:
     - staging
@@ -79,7 +82,7 @@ storage:
     - templates
     vpc_sc:
       protected: true
-  - name: stream-accelerator-archive
+  - name: stream-accelerator-2-archive
     description: Archived raw events
     folders:
     - events
@@ -87,7 +90,7 @@ storage:
       protected: true
 pipeline_configs:
   config_directory: config
-  bucket: stream-accelerator-config
+  bucket: stream-accelerator-2-config
   files:
   - source_mapping.yaml
   - destination_mapping.yaml
@@ -144,7 +147,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v125
+    tag: v147
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -152,16 +155,16 @@ dataflow:
     name: json-streaming-templ-new
     metadata_file: docker/metadata.json
     sdk_language: PYTHON
-    storage_path: gs://stream-accelerator-dataflow/templates/json-streaming-templ-new.json
+    storage_path: gs://stream-accelerator-2-dataflow/templates/json-streaming-templ-latest.json
   job:
     name_prefix: json-streaming
     worker_region: us-central1
     worker_zone: us-central1-a
-    staging_location: gs://stream-accelerator-dataflow/staging
-    temp_location: gs://stream-accelerator-dataflow/temp
+    staging_location: gs://stream-accelerator-2-dataflow/staging
+    temp_location: gs://stream-accelerator-2-dataflow/temp
     parameters:
-      subscription: projects/stream-accelerator/subscriptions/json-events-sub
-      config_bucket: stream-accelerator-config
+      subscription: projects/stream-accelerator-2/subscriptions/json-events-sub
+      config_bucket: stream-accelerator-2-config
       env: dev
       job_mode: streaming
     num_workers: 2
@@ -200,7 +203,7 @@ deployment:
   enable_logging: true
 control_planes:
   composer:
-    config_bucket: stream-accelerator-config
+    config_bucket: stream-accelerator-2-config
     config_path: composer.yaml
 orchestration:
   dags:
@@ -208,11 +211,8 @@ orchestration:
     streaming_stop: dataflow_streaming_stop
     rolling_deploy: dataflow_streaming_rolling_deploy
     recovery: failure_auto_recovery
-archive:
-  enabled: true
-  bucket: stream-accelerator-archive
-  path_prefix: events
-  format: json
+raw_events:
+  table: stream-accelerator-2.analytics.raw_events
 schema_management:
   enabled: true
   scope: FULL_EVENT
@@ -227,7 +227,7 @@ observability:
   alerts:
     enabled: true
     email:
-      address: yourname@example.com
+      address: sidharthunnikrishnan2002@gmail.com
 security:
   cmek:
     enabled: false

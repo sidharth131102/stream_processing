@@ -142,6 +142,15 @@ def create_subscription(cfg: dict):
 
     run(cmd, check=False)
 
+def attach_schema_to_events_topic(topic_name: str, schema_name: str):
+    """
+    Specifically updates the events topic with the required schema and encoding.
+    """
+    run([
+        "gcloud", "pubsub", "topics", "update", topic_name,
+        "--schema", schema_name,
+        "--message-encoding", "json"
+    ], check=False)
 
 def register_schema(schema: dict):
     run([
@@ -279,7 +288,7 @@ def update_pipeline_yaml_with_channels(
 # --------------------------------------------------
 # Composer (reuse your logic)
 # --------------------------------------------------
-from bootstrap_composer import main as bootstrap_composer
+# from bootstrap_composer import main as bootstrap_composer
 
 
 # --------------------------------------------------
@@ -317,6 +326,8 @@ def main():
     grant_roles(project_id, f"serviceAccount:{sa_email}", sa_cfg["roles"])
     cmek_cfg = cfg.get("security", {}).get("cmek", {})
     cmek_key = cmek_cfg.get("key_name") if cmek_cfg.get("enabled") else None
+    event_topic_name = cfg["pubsub"]["topics"][0]["name"]
+    registry_schema_name = cfg["pubsub"]["schemas"][0]["name"]
     # --------------------------------------------------
     # Buckets
     # --------------------------------------------------
@@ -346,6 +357,11 @@ def main():
     for sub in cfg["pubsub"]["subscriptions"]:
         create_subscription(sub)
 
+    attach_schema_to_events_topic(
+        topic_name=event_topic_name, 
+        schema_name=registry_schema_name
+    )
+
     docker_cfg = cfg.get("docker", {}).get("registry", {})
 
     if docker_cfg:
@@ -357,9 +373,9 @@ def main():
 
 
 
-    # --------------------------------------------------
-    # BigQuery
-    # --------------------------------------------------
+    # # --------------------------------------------------
+    # # BigQuery
+    # # --------------------------------------------------
     for ds in cfg["bigquery"]["datasets"]:
         ensure_dataset(project_id, ds["name"], ds["location"])
 
@@ -370,34 +386,12 @@ def main():
         Path("monitoring/dashboard/dataflow_observability.json")
     )
 
-    create_alert_policies(
-        Path("monitoring/alerts")
-    )
+    # # --------------------------------------------------
+    # # Composer
+    # # --------------------------------------------------
+    # bootstrap_composer()
 
-    alerts_cfg = cfg.get("observability", {}).get("alerts", {})
-
-    if alerts_cfg.get("enabled", False):
-        channels = {}
-
-        email_cfg = alerts_cfg.get("email")
-        if email_cfg and "address" in email_cfg:
-            channels["email"] = create_email_channel(
-                project_id,
-                email_cfg["address"]
-            )
-
-        if channels:
-            update_pipeline_yaml_with_channels(
-                Path("config/pipeline.yaml"),
-                channels
-            )
-
-    # --------------------------------------------------
-    # Composer
-    # --------------------------------------------------
-    bootstrap_composer()
-
-    print("\n🎉 Infrastructure setup completed successfully")
+    # print("\n🎉 Infrastructure setup completed successfully")
 
 
 if __name__ == "__main__":

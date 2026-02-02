@@ -36,15 +36,19 @@ def run_capture(cmd: list) -> str:
     print("\n▶", " ".join(cmd))
     return subprocess.check_output(cmd, text=True).strip()
 
+def load_yaml(path: Path) -> Dict:
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return yaml.safe_load(path.read_text())
 
-def load_yaml_from_gcs(bucket: str, path: str) -> Dict:
-    client = storage.Client()
-    blob = client.bucket(bucket).blob(path)
+# def load_yaml_from_gcs(bucket: str, path: str) -> Dict:
+#     client = storage.Client()
+#     blob = client.bucket(bucket).blob(path)
 
-    if not blob.exists():
-        raise FileNotFoundError(
-            f"composer.yaml not found at gs://{bucket}/{path}"
-        )
+#     if not blob.exists():
+#         raise FileNotFoundError(
+#             f"composer.yaml not found at gs://{bucket}/{path}"
+#         )
 
     return yaml.safe_load(blob.download_as_text())
 
@@ -142,10 +146,8 @@ def main():
         # --------------------------------------------------
         # Load composer.yaml
         # --------------------------------------------------
-        CONFIG_BUCKET = "stream-accelerator-config"
-        COMPOSER_YAML = "composer.yaml"
 
-        cfg = load_yaml_from_gcs(CONFIG_BUCKET, COMPOSER_YAML)
+        cfg = load_yaml(Path("config/composer.yaml"))
 
         project_id = cfg["project"]["id"]
         project_number = cfg["project"]["number"]

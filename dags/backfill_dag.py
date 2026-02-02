@@ -1,23 +1,18 @@
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta
 import yaml
 import tempfile
+import uuid
 
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-
+from airflow.models.param import Param
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
-from airflow.providers.google.cloud.operators.dataflow import (
-    DataflowStartFlexTemplateOperator,
-)
-from airflow.providers.google.cloud.sensors.dataflow import (
-    DataflowJobStatusSensor,
-)
-from airflow.providers.google.cloud.operators.bigquery import (
-    BigQueryInsertJobOperator,
-)
+from airflow.providers.google.cloud.operators.dataflow import DataflowStartFlexTemplateOperator
+from airflow.providers.google.cloud.sensors.dataflow import DataflowJobStatusSensor
+from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 
 # --------------------------------------------------
 # DAG METADATA
@@ -26,36 +21,22 @@ DAG_ID = "dataflow_backfill"
 START_DATE = datetime(2024, 1, 1)
 
 # --------------------------------------------------
-# Helper: Load configs
+# Helper: Load configs & validate user input
 # --------------------------------------------------
-def build_gcs_path_pattern(
-    bucket: str,
-    prefix: str,
-    start_time: str,
-    end_time: str,
-) -> str:
-    start = datetime.fromisoformat(start_time)
-    end = datetime.fromisoformat(end_time)
-
-    patterns = []
-    current = start
-
-    while current < end:
-        patterns.append(
-            f"gs://{bucket}/{prefix}/"
-            f"{current:%Y}/{current:%m}/{current:%d}/*.json"
-        )
-        current += timedelta(days=1)
-
-    return ",".join(patterns)
-
 def load_backfill_config(**context):
     dag_conf = context["dag_run"].conf or {}
+
     start_time = dag_conf.get("start_time")
     end_time = dag_conf.get("end_time")
 
     if not start_time or not end_time:
-        raise ValueError("start_time and end_time are required for backfill")
+        raise ValueError("start_time and end_time are required (ISO-8601)")
+
+    # Validate ISO-8601 early
+    datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+    datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+
+    run_id = uuid.uuid4().hex[:12]
 
     config_bucket = Variable.get("config_bucket")
     pipeline_yaml_path = Variable.get("pipeline_yaml_path")
@@ -78,22 +59,16 @@ def load_backfill_config(**context):
         for k, v in job_cfg["parameters"].items()
         if k not in ("subscription", "job_mode")
     }
-    path_pattern = build_gcs_path_pattern(
-    bucket=backfill_cfg["source"]["archive_bucket"],
-    prefix=backfill_cfg["source"]["prefix"],
-    start_time=start_time,
-    end_time=end_time,
-    )
-
 
     safety_cfg = backfill_cfg.get("safety", {})
-
     timeout_seconds = int(safety_cfg.get("dataflow_timeout_seconds", 6 * 60 * 60))
 
     return {
+        "run_id": run_id,
         "project_id": pipeline_cfg["project"]["id"],
         "region": pipeline_cfg["project"]["region"],
         "template_path": pipeline_cfg["dataflow"]["template"]["storage_path"],
+
         "job_name_prefix": backfill_job_cfg["name_prefix"],
         "service_account": (
             f"{pipeline_cfg['service_account']['name']}"
@@ -112,7 +87,7 @@ def load_backfill_config(**context):
             "job_mode": "backfill",
             "backfill_start_ts": start_time,
             "backfill_end_ts": end_time,
-            "path_pattern": path_pattern,
+            "run_id": run_id,
         },
 
         "dataflow_timeout_seconds": timeout_seconds,
@@ -122,7 +97,6 @@ def load_backfill_config(**context):
         "temp_dataset": backfill_cfg["sink"]["temp_table"]["dataset"],
         "temp_table_prefix": backfill_cfg["sink"]["temp_table"]["table_prefix"],
     }
-
 
 # --------------------------------------------------
 # Helper: Build Flex Template body
@@ -147,7 +121,6 @@ def build_backfill_body(context, **_):
         }
     }
 
-
 # --------------------------------------------------
 # Helper: Fetch target table columns
 # --------------------------------------------------
@@ -170,16 +143,8 @@ def fetch_target_columns(**context):
 
     context["ti"].xcom_push(key="columns", value=columns)
 
-def enforce_timeout(**context):
-    cfg = context["ti"].xcom_pull(task_ids="load_backfill_config")
-    timeout = cfg["dataflow_timeout_seconds"]
-
-    if timeout <= 0:
-        raise ValueError("Invalid dataflow_timeout_seconds")
-    
-
 # --------------------------------------------------
-# Helper: Generate MERGE SQL dynamically
+# Helper: Generate MERGE SQL
 # --------------------------------------------------
 def generate_merge_sql(**context):
     ti = context["ti"]
@@ -214,7 +179,6 @@ def generate_merge_sql(**context):
 
     ti.xcom_push(key="merge_sql", value=sql)
 
-
 # --------------------------------------------------
 # DAG DEFINITION
 # --------------------------------------------------
@@ -225,6 +189,18 @@ with DAG(
     catchup=False,
     max_active_runs=1,
     tags=["dataflow", "backfill"],
+    params={
+        "start_time": Param(
+            "",
+            type="string",
+            description="Backfill start time (ISO-8601, e.g. 2024-01-01T00:00:00Z)",
+        ),
+        "end_time": Param(
+            "",
+            type="string",
+            description="Backfill end time (ISO-8601, e.g. 2024-01-02T00:00:00Z)",
+        ),
+    },
 ) as dag:
 
     start = EmptyOperator(task_id="start")
@@ -232,11 +208,6 @@ with DAG(
     load_cfg = PythonOperator(
         task_id="load_backfill_config",
         python_callable=load_backfill_config,
-    )
-    
-    validate_timeout = PythonOperator(
-    task_id="validate_backfill_timeout",
-    python_callable=enforce_timeout,
     )
 
     start_backfill = DataflowStartFlexTemplateOperator(
@@ -253,11 +224,9 @@ with DAG(
         job_id="{{ ti.xcom_pull('start_backfill_dataflow')['id'] }}",
         expected_statuses={"JOB_STATE_DONE"},
         poke_interval=60,
-
-        # ✅ THIS *CAN* BE DYNAMIC
         execution_timeout=timedelta(hours=24),
-        
     )
+
     fetch_columns = PythonOperator(
         task_id="fetch_target_columns",
         python_callable=fetch_target_columns,
@@ -280,11 +249,9 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    # Graph
     (
         start
         >> load_cfg
-        >> validate_timeout
         >> start_backfill
         >> wait_for_backfill
         >> fetch_columns

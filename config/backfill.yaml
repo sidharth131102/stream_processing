@@ -5,21 +5,17 @@
 mode: backfill
 
 project:
-  id: stream-accelerator
+  id: stream-accelerator-2
   region: us-central1
 
 # -------------------------------
 # Input (GCS Archive)
 # -------------------------------
 source:
-  type: gcs
-  format: json            # json | avro | parquet (future-proof)
-  archive_bucket: stream-accelerator-archive
-  prefix: events
-  path_pattern: >
-    gs://stream-accelerator-archive/events/{yyyy}/{MM}/{dd}/*.json
+  type: bigquery
+  raw_table: stream-accelerator-2.analytics.raw_events
   event_time_field: event_ts
-  timezone: UTC
+
 
 # -------------------------------
 # Backfill Window
@@ -46,7 +42,7 @@ deduplication:
 # (Reuse same configs as streaming)
 # -------------------------------
 transformations:
-  config_bucket: stream-accelerator-config
+  config_bucket: stream-accelerator-2-config
   files:
     - transformation.yaml
     - validation.yaml
@@ -93,8 +89,8 @@ dataflow:
     worker_machine_type: e2-standard-4
     disk_size_gb: 100
 
-    staging_location: gs://stream-accelerator-dataflow/staging
-    temp_location: gs://stream-accelerator-dataflow/temp
+    staging_location: gs://stream-accelerator-2-dataflow/staging
+    temp_location: gs://stream-accelerator-2-dataflow/temp
 
     experiments:
       - use_runner_v2
@@ -121,4 +117,4 @@ monitoring:
 # -------------------------------
 dlq:
   enabled: true
-  topic: projects/stream-accelerator/topics/json-events-backfill-dlq
+  topic: projects/stream-accelerator-2/topics/json-events-backfill-dlq

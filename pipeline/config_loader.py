@@ -61,11 +61,7 @@ def load_all_configs(bucket: str):
     # -------------------------------
 # Archive configuration
 # -------------------------------
-    archive_cfg = pipeline_cfg.get("archive")
-    if archive_cfg:
-        if not isinstance(archive_cfg, dict):
-            raise ValueError("archive must be a mapping in pipeline.yaml")
-        cfg["archive"] = archive_cfg
+
 
     schema_cfg = pipeline_cfg.get("schema_management", {})
     if schema_cfg.get("enabled", False):
@@ -73,7 +69,14 @@ def load_all_configs(bucket: str):
         cfg["expected_schema"] = _load_json(f"schemas/{schema_name}.json")
         cfg["schema_management"] = schema_cfg
 
+    # -------------------------------
+    # Raw events configuration  
+    raw_cfg = pipeline_cfg.get("raw_events")
+    if not raw_cfg:
+        raise KeyError("pipeline.yaml missing raw_events config")
 
+    cfg["raw_events"] = raw_cfg
+    # -------------------------------
     streaming_tuning = pipeline_cfg.get("streaming_tuning")
     if not streaming_tuning:
         raise KeyError("pipeline.yaml missing 'streaming_tuning'")

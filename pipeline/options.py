@@ -37,8 +37,7 @@ class CustomOptions(PipelineOptions):
         parser.add_argument("--backfill_end_ts",required=False)
 
         parser.add_argument(
-            "--path_pattern",
-            type=str,
+            "--run_id",
             required=False,
-            help="Resolved GCS path pattern for backfill"
+            help="Unique backfill run identifier (injected by Airflow)"
         )

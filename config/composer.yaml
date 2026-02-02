@@ -30,7 +30,7 @@ composer:
 
     # Optional labels (recommended for platforms)
     labels:
-      platform: stream-accelerator
+      platform: stream-accelerator-2
       env: dev
       owner: data-platform
 
@@ -70,7 +70,7 @@ composer:
   airflow:
     variables:
       # Used by all DAGs to load pipeline.yaml dynamically
-      config_bucket: stream-accelerator-config
+      config_bucket: stream-accelerator-2-config
       pipeline_yaml_path: pipeline.yaml
 
     # Optional: default Airflow config overrides

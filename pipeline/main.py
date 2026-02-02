@@ -30,13 +30,10 @@ def run():
         if not custom.backfill_start_ts or not custom.backfill_end_ts:
             raise ValueError("Backfill requires start and end timestamps")
 
-        if not custom.path_pattern:
-            raise ValueError("Backfill requires --path_pattern")
-
         cfg["backfill"] = {
             "start_ts": custom.backfill_start_ts,
             "end_ts": custom.backfill_end_ts,
-            "path_pattern": custom.path_pattern,
+            "run_id": custom.run_id,
         }
 
     # ----------------------------

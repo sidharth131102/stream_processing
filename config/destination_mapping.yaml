@@ -13,6 +13,6 @@ payload_policy:
 
 schema_mode: FINAL_OUTPUT
 
-dlq_topic: projects/stream-accelerator/topics/json-events-dlq
+dlq_topic: projects/stream-accelerator-2/topics/json-events-dlq
 
 #this file can be changes based on requirements/scenario
