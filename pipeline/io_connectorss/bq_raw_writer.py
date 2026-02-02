@@ -6,7 +6,7 @@ import json
 
 class WriteRawEventsBQ(beam.PTransform):
     def __init__(self, cfg: dict):
-        self.table = cfg["table"]
+        self.table = cfg["table"]  # project:dataset.raw_events
 
     def expand(self, pcoll):
         return (
@@ -28,6 +28,15 @@ class WriteRawEventsBQ(beam.PTransform):
                         {"name": "pubsub_metadata", "type": "STRING"},
                     ]
                 },
+
+                # ✅ PARTITIONING (CRITICAL FOR BACKFILL COST)
+                additional_bq_parameters={
+                    "timePartitioning": {
+                        "type": "DAY",
+                        "field": "event_ts"
+                    }
+                },
+
                 create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
                 write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
                 method=beam.io.WriteToBigQuery.Method.STORAGE_WRITE_API,
@@ -45,12 +54,20 @@ class WriteRawEventsBQ(beam.PTransform):
         if isinstance(event_ts, datetime):
             event_ts_beam = Timestamp.from_utc_datetime(event_ts)
             event_ts_raw = event_ts.isoformat()
+
         elif isinstance(event_ts, str):
             event_ts_beam = Timestamp.from_rfc3339(event_ts)
             event_ts_raw = event_ts
+
         else:
             event_ts_beam = None
             event_ts_raw = None
+
+        payload = event.get("payload")
+        if isinstance(payload, str):
+            raw_payload = payload
+        else:
+            raw_payload = json.dumps(payload)
 
         return {
             "ingest_ts": now_ts,
@@ -61,6 +78,6 @@ class WriteRawEventsBQ(beam.PTransform):
             "event_source": event.get("event_source"),
             "schema_name": "json_event",
             "schema_version": "v2",
-            "raw_payload": json.dumps(event.get("payload")),
+            "raw_payload": raw_payload,
             "pubsub_metadata": json.dumps(event.get("_pubsub")),
         }

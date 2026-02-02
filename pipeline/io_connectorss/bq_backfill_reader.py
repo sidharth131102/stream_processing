@@ -20,16 +20,9 @@ class ReadFromRawBQ(beam.PTransform):
           event_id,
           event_type,
           event_source,
-
-          -- Preserve original event timestamp contract
-          event_ts_raw AS event_ts,
-
-          -- Payload rehydration
+          CAST(event_ts_raw AS STRING) AS event_ts,
           raw_payload AS payload,
-
-          -- Pub/Sub metadata (may be NULL for older data)
-          pubsub_metadata AS _pubsub
-
+          pubsub_metadata AS _pubsub 
         FROM `{self.table}`
         WHERE event_ts >= TIMESTAMP(@start_ts)
           AND event_ts <  TIMESTAMP(@end_ts)
