@@ -189,6 +189,13 @@ def generate_merge_sql(**context):
 
     ti.xcom_push(key="merge_sql", value=sql)
 
+def extract_runtime_values(**context):
+    cfg = context["ti"].xcom_pull(task_ids="load_backfill_config")
+    return {
+        "project_id": cfg["project_id"],
+        "region": cfg["region"],
+    }
+
 
 # --------------------------------------------------
 # DAG DEFINITION
@@ -220,6 +227,12 @@ with DAG(
         task_id="load_backfill_config",
         python_callable=load_backfill_config,
     )
+    
+    extract_runtime = PythonOperator(
+        task_id="extract_runtime_values",
+        python_callable=extract_runtime_values,
+    )
+
 
     start_backfill = DataflowStartFlexTemplateOperator(
         task_id="start_backfill_dataflow",
@@ -230,9 +243,9 @@ with DAG(
 
     wait_for_backfill = DataflowJobStatusSensor(
         task_id="wait_for_backfill_completion",
-        project_id="{{ ti.xcom_pull('load_backfill_config')['project_id'] }}",
-        location="{{ ti.xcom_pull('load_backfill_config')['region'] }}",
-        job_id="{{ ti.xcom_pull('start_backfill_dataflow')['id'] }}",
+        project_id="{{ ti.xcom_pull(task_ids='extract_runtime_values')['project_id'] }}",
+        location="{{ ti.xcom_pull(task_ids='extract_runtime_values')['region'] }}",
+        job_id="{{ ti.xcom_pull(task_ids='start_backfill_dataflow')['id'] }}",
         expected_statuses={"JOB_STATE_DONE"},
         poke_interval=60,
         execution_timeout=timedelta(hours=24),
@@ -265,6 +278,7 @@ with DAG(
     (
         start
         >> load_cfg
+        >> extract_runtime
         >> start_backfill
         >> wait_for_backfill
         >> fetch_columns
