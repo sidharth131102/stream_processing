@@ -24,8 +24,8 @@ class ReadFromRawBQ(beam.PTransform):
           raw_payload AS payload,
           pubsub_metadata AS _pubsub 
         FROM `{self.table}`
-        WHERE event_ts >= TIMESTAMP(@start_ts)
-          AND event_ts <  TIMESTAMP(@end_ts)
+        WHERE TIMESTAMP(event_ts_raw) >= TIMESTAMP('{self.start_ts}')
+          AND TIMESTAMP(event_ts_raw) <  TIMESTAMP('{self.end_ts}')
         """
 
         return (
@@ -34,19 +34,6 @@ class ReadFromRawBQ(beam.PTransform):
             >> beam.io.ReadFromBigQuery(
                 query=query,
                 use_standard_sql=True,
-                query_parameters=[
-                    {
-                        "name": "start_ts",
-                        "parameterType": {"type": "TIMESTAMP"},
-                        "parameterValue": {"value": self.start_ts},
-                    },
-                    {
-                        "name": "end_ts",
-                        "parameterType": {"type": "TIMESTAMP"},
-                        "parameterValue": {"value": self.end_ts},
-                    },
-                ],
                 project=self.project,
-                location=self.location,
             )
         )

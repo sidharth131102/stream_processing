@@ -5,11 +5,21 @@ from datetime import datetime
 from pipeline.observability.metrics import PipelineMetrics
 
 
-def _event_ts_as_float(event: dict) -> float:
+def _event_ts_as_float(event):
     ts = event.get("event_ts")
-    if not ts:
-        return 0.0
-    return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+
+    if not ts or not isinstance(ts, str):
+        return float("-inf")
+
+    try:
+        return datetime.fromisoformat(
+            ts.replace("Z", "+00:00")
+        ).timestamp()
+    except Exception:
+        # Treat invalid timestamps as oldest
+        return float("-inf")
+
+
 
 
 def _pick_latest_and_track(kv):

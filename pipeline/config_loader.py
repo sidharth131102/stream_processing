@@ -58,6 +58,11 @@ def load_all_configs(bucket: str):
         cfg["backfill_yaml"] = backfill_cfg
     
     pipeline_cfg = _load_yaml("pipeline.yaml")
+    project_cfg = pipeline_cfg.get("project")
+    if not project_cfg:
+        raise KeyError("pipeline.yaml missing required 'project' block")
+
+    cfg["project"] = project_cfg
     # -------------------------------
 # Archive configuration
 # -------------------------------

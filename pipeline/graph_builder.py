@@ -49,16 +49,30 @@ def build_pipeline(p, cfg, subscription):
         )
 
     # ==================================================
-    # 2️⃣ Envelope + Parse + Assign Event Time
+    # 2️⃣  Parse + Assign Event Time + Envelope
     # ==================================================
     parsed = (
         main
-        | "Envelope" >> beam.ParDo(Envelope())
         | "ParseEvent" >> beam.ParDo(ParseEvent(cfg["source"]))
     )
 
-    schema_checked = (
+    assigned = (
         parsed
+        | "AssignEventTime"
+        >> beam.ParDo(AssignEventTime()).with_outputs("dlq", main="main")
+    )
+
+    main = (
+        assigned.main
+        | "Envelope" >> beam.ParDo(Envelope())
+    )
+
+    event_time_dlq = assigned.dlq
+
+
+
+    schema_checked = (
+        main
         | "SchemaGuard"
         >> beam.ParDo(
             SchemaGuard(
@@ -70,16 +84,6 @@ def build_pipeline(p, cfg, subscription):
 
     main = schema_checked.main
     schema_dlq = schema_checked.schema_dlq
-
-    # Now assign event time
-    parsed_with_time = (
-        main
-        | "AssignEventTime"
-        >> beam.ParDo(AssignEventTime()).with_outputs("dlq", main="main")
-    )
-
-    main = parsed_with_time.main
-    event_time_dlq = parsed_with_time.dlq
 
     if cfg.get("job_mode") == "streaming":
         main = main | "TrackEventLag" >> beam.ParDo(TrackEventLag())

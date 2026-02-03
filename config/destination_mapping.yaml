@@ -3,6 +3,10 @@ target:
   dataset: analytics
   table: service_requests
 
+temp_table:
+  dataset: analytics
+  table_prefix: service_requests_backfill
+
 envelope_fields:
   beam_event_time: TIMESTAMP   # ONLY Beam-added fields
   beam_processing_time: TIMESTAMP   # ONLY Beam-added fields

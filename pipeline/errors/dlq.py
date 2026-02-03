@@ -25,7 +25,10 @@ class WriteDLQ(beam.PTransform):
 
         def json_serializable(obj):
             if isinstance(obj, Timestamp):
-                return obj.to_rfc3339()
+                try:
+                    return obj.to_rfc3339()
+                except Exception:
+                    return "invalid-beam-timestamp"
             if isinstance(obj, datetime):
                 return obj.isoformat()
             if isinstance(obj, bytes):

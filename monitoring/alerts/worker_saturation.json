@@ -7,7 +7,7 @@
       "conditionThreshold": {
         "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/cpu_utilization\"",
         "comparison": "COMPARISON_GT",
-        "thresholdValue": 0.8,
+        "thresholdValue": 0.1,
         "duration": "600s",
         "aggregations": [
           {

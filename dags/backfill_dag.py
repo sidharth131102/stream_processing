@@ -59,7 +59,7 @@ def load_backfill_config(**context):
         for k, v in job_cfg["parameters"].items()
         if k not in ("subscription", "job_mode")
     }
-
+    base_parameters["subscription"] = "projects/dummy/subscriptions/dummy"
     safety_cfg = backfill_cfg.get("safety", {})
     timeout_seconds = int(safety_cfg.get("dataflow_timeout_seconds", 6 * 60 * 60))
 
@@ -87,7 +87,6 @@ def load_backfill_config(**context):
             "job_mode": "backfill",
             "backfill_start_ts": start_time,
             "backfill_end_ts": end_time,
-            "run_id": run_id,
         },
 
         "dataflow_timeout_seconds": timeout_seconds,
@@ -151,8 +150,19 @@ def generate_merge_sql(**context):
     cfg = ti.xcom_pull(task_ids="load_backfill_config")
     columns = ti.xcom_pull(task_ids="fetch_target_columns", key="columns")
 
-    merge_keys = ["event_id"]
-    non_key_cols = [c for c in columns if c not in merge_keys]
+    merge_keys = {"event_id"}
+
+    # ❗ Columns that should NEVER be updated during backfill
+    immutable_cols = {
+        "event_id",
+        "beam_event_time",
+        "beam_processing_time",
+    }
+
+    non_key_cols = [
+        c for c in columns
+        if c not in immutable_cols
+    ]
 
     update_clause = ",\n      ".join(
         f"{c} = S.{c}" for c in non_key_cols
@@ -178,6 +188,7 @@ def generate_merge_sql(**context):
     """
 
     ti.xcom_push(key="merge_sql", value=sql)
+
 
 # --------------------------------------------------
 # DAG DEFINITION
@@ -239,6 +250,7 @@ with DAG(
 
     merge_backfill = BigQueryInsertJobOperator(
         task_id="merge_backfill_to_main",
+        location="{{ ti.xcom_pull('load_backfill_config')['region'] }}",
         configuration={
             "query": {
                 "query": "{{ ti.xcom_pull(task_ids='generate_merge_sql', key='merge_sql') }}",
@@ -246,6 +258,7 @@ with DAG(
             }
         },
     )
+
 
     end = EmptyOperator(task_id="end")
 

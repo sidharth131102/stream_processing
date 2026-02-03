@@ -1,6 +1,7 @@
 import apache_beam as beam
 from datetime import datetime, timezone
 import logging
+from apache_beam.utils.timestamp import Timestamp
 class AssignEventTime(beam.DoFn):
     def process(self, event):
         try:
@@ -14,10 +15,9 @@ class AssignEventTime(beam.DoFn):
 
             # Keep for downstream usage (BQ, rules, etc.)
             event["event_timestamp"] = dt.timestamp()
-            logging.error("🔥 NEW AssignEventTime CODE ACTIVE")
 
             # 🔥 THIS IS THE KEY FIX
-            yield beam.window.TimestampedValue(event, dt.timestamp())
+            yield beam.window.TimestampedValue(event, Timestamp.from_utc_datetime(dt))
 
         except Exception as e:
             yield beam.pvalue.TaggedOutput(

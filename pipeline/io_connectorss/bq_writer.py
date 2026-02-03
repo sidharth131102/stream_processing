@@ -13,11 +13,18 @@ def _resolve_table(cfg):
                 "Backfill mode requires destination.temp_table configuration"
             )
 
-        run_id = cfg["backfill"]["run_id"]
+        run_id = cfg["backfill"].get("run_id")
+
+        if not run_id:
+            start = cfg["backfill"]["start_ts"].replace(":", "").replace("-", "")
+            end = cfg["backfill"]["end_ts"].replace(":", "").replace("-", "")
+            run_id = f"{start}_{end}"
+
         dataset = dest["temp_table"]["dataset"]
         prefix = dest["temp_table"]["table_prefix"]
 
         return f"{project}:{dataset}.{prefix}_{run_id}"
+
 
     # Streaming (or default)
     return (

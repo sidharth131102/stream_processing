@@ -7,7 +7,7 @@
       "conditionThreshold": {
         "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/watermark_lag\"",
         "comparison": "COMPARISON_GT",
-        "thresholdValue": 300,
+        "thresholdValue": 10,
         "duration": "300s",
         "aggregations": [
           {
