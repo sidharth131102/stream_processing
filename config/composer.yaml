@@ -72,6 +72,7 @@ composer:
       # Used by all DAGs to load pipeline.yaml dynamically
       config_bucket: stream-accelerator-2-config
       pipeline_yaml_path: pipeline.yaml
+      bq_location: us-central1
 
     # Optional: default Airflow config overrides
     config_overrides:

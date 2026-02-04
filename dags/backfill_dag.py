@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 import yaml
 import tempfile
 import uuid
-
+import logging
+import time
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
@@ -13,6 +14,7 @@ from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.operators.dataflow import DataflowStartFlexTemplateOperator
 from airflow.providers.google.cloud.sensors.dataflow import DataflowJobStatusSensor
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
+from airflow.providers.google.cloud.hooks.dataflow import DataflowHook
 
 # --------------------------------------------------
 # DAG METADATA
@@ -120,81 +122,108 @@ def build_backfill_body(context, **_):
         }
     }
 
+
 # --------------------------------------------------
 # Helper: Fetch target table columns
 # --------------------------------------------------
-def fetch_target_columns(**context):
-    cfg = context["ti"].xcom_pull(task_ids="load_backfill_config")
+# def fetch_target_columns(**context):
+#     ti = context["ti"]
+#     cfg = ti.xcom_pull(task_ids="load_backfill_config")
 
-    hook = BigQueryHook()
-    sql = f"""
-    SELECT column_name
-    FROM `{cfg['project_id']}.{cfg['target_dataset']}.INFORMATION_SCHEMA.COLUMNS`
-    WHERE table_name = '{cfg['target_table']}'
-    ORDER BY ordinal_position
-    """
+#     hook = BigQueryHook(
+#         location=Variable.get("bq_location"),          # ✅ REQUIRED for regional datasets
+#         use_legacy_sql=False,
+#     )
 
-    rows = hook.get_records(sql)
-    columns = [r[0] for r in rows]
+#     sql = f"""
+#     SELECT column_name
+#     FROM {cfg['project_id']}.{cfg['target_dataset']}.INFORMATION_SCHEMA.COLUMNS
+#     WHERE table_name = '{cfg['target_table']}'
+#     ORDER BY ordinal_position
+#     """
 
-    if "event_id" not in columns:
-        raise ValueError("event_id must exist in target table")
+#     rows = hook.get_records(sql)
+#     columns = [r[0] for r in rows]
 
-    context["ti"].xcom_push(key="columns", value=columns)
+#     if "event_id" not in columns:
+#         raise ValueError("event_id must exist in target table")
 
+#     ti.xcom_push(key="columns", value=columns)
 # --------------------------------------------------
 # Helper: Generate MERGE SQL
 # --------------------------------------------------
-def generate_merge_sql(**context):
+# def generate_merge_sql(**context):
+#     ti = context["ti"]
+#     cfg = ti.xcom_pull(task_ids="load_backfill_config")
+#     columns = ti.xcom_pull(task_ids="fetch_target_columns", key="columns")
+
+#     immutable = {"event_id", "beam_event_time", "beam_processing_time"}
+
+#     mutable = [c for c in columns if c not in immutable]
+
+#     update_block = ""
+#     if mutable:
+#         update_block = (
+#             "WHEN MATCHED THEN UPDATE SET\n    "
+#             + ",\n    ".join(f"{c}=S.{c}" for c in mutable)
+#         )
+
+#     insert_cols = ", ".join(columns)
+#     insert_vals = ", ".join(f"S.{c}" for c in columns)
+
+#     temp_table = f"{cfg['temp_table_prefix']}_{cfg['run_id']}"
+
+#     sql = f"""
+#     MERGE `{cfg['project_id']}.{cfg['target_dataset']}.{cfg['target_table']}` T
+#     USING `{cfg['project_id']}.{cfg['temp_dataset']}.{temp_table}` S
+#     ON T.event_id = S.event_id
+#     {update_block}
+#     WHEN NOT MATCHED THEN
+#       INSERT ({insert_cols})
+#       VALUES ({insert_vals})
+#     """
+
+#     ti.xcom_push(key="merge_sql", value=sql)
+
+
+
+def wait_for_dataflow_job(**context):
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_backfill_config")
-    columns = ti.xcom_pull(task_ids="fetch_target_columns", key="columns")
 
-    merge_keys = {"event_id"}
+    job_id = ti.xcom_pull(task_ids="start_backfill_dataflow")["id"]
 
-    # ❗ Columns that should NEVER be updated during backfill
-    immutable_cols = {
-        "event_id",
-        "beam_event_time",
-        "beam_processing_time",
-    }
+    hook = DataflowHook()
+    client = hook.get_conn()
 
-    non_key_cols = [
-        c for c in columns
-        if c not in immutable_cols
-    ]
+    while True:
+        job = (
+            client.projects()
+            .locations()
+            .jobs()
+            .get(
+                projectId=cfg["project_id"],
+                location=cfg["region"],
+                jobId=job_id,
+            )
+            .execute()
+        )
 
-    update_clause = ",\n      ".join(
-        f"{c} = S.{c}" for c in non_key_cols
-    )
+        state = job.get("currentState")
+        logging.info("Dataflow job %s state: %s", job_id, state)
 
-    insert_cols = ", ".join(columns)
-    insert_vals = ", ".join(f"S.{c}" for c in columns)
+        if state == "JOB_STATE_DONE":
+            return
 
-    temp_table = f"{cfg['temp_table_prefix']}_{cfg['run_id']}"
+        if state in (
+            "JOB_STATE_FAILED",
+            "JOB_STATE_CANCELLED",
+            "JOB_STATE_DRAINED",
+        ):
+            raise RuntimeError(f"Dataflow job ended in state {state}")
 
-    sql = f"""
-    MERGE `{cfg['project_id']}.{cfg['target_dataset']}.{cfg['target_table']}` T
-    USING `{cfg['project_id']}.{cfg['temp_dataset']}.{temp_table}` S
-    ON T.event_id = S.event_id
+        time.sleep(60)
 
-    WHEN MATCHED THEN
-      UPDATE SET
-        {update_clause}
-
-    WHEN NOT MATCHED THEN
-      INSERT ({insert_cols})
-      VALUES ({insert_vals})
-    """
-
-    ti.xcom_push(key="merge_sql", value=sql)
-
-def extract_runtime_values(**context):
-    cfg = context["ti"].xcom_pull(task_ids="load_backfill_config")
-    return {
-        "project_id": cfg["project_id"],
-        "region": cfg["region"],
-    }
 
 
 # --------------------------------------------------
@@ -227,12 +256,6 @@ with DAG(
         task_id="load_backfill_config",
         python_callable=load_backfill_config,
     )
-    
-    extract_runtime = PythonOperator(
-        task_id="extract_runtime_values",
-        python_callable=extract_runtime_values,
-    )
-
 
     start_backfill = DataflowStartFlexTemplateOperator(
         task_id="start_backfill_dataflow",
@@ -241,36 +264,31 @@ with DAG(
         body=build_backfill_body,
     )
 
-    wait_for_backfill = DataflowJobStatusSensor(
+    wait_for_backfill = PythonOperator(
         task_id="wait_for_backfill_completion",
-        project_id="{{ ti.xcom_pull(task_ids='extract_runtime_values')['project_id'] }}",
-        location="{{ ti.xcom_pull(task_ids='extract_runtime_values')['region'] }}",
-        job_id="{{ ti.xcom_pull(task_ids='start_backfill_dataflow')['id'] }}",
-        expected_statuses={"JOB_STATE_DONE"},
-        poke_interval=60,
-        execution_timeout=timedelta(hours=24),
+        python_callable=wait_for_dataflow_job,
     )
 
-    fetch_columns = PythonOperator(
-        task_id="fetch_target_columns",
-        python_callable=fetch_target_columns,
-    )
+    # fetch_columns = PythonOperator(
+    #     task_id="fetch_target_columns",
+    #     python_callable=fetch_target_columns,
+    # )
 
-    build_merge_sql = PythonOperator(
-        task_id="generate_merge_sql",
-        python_callable=generate_merge_sql,
-    )
+    # build_merge_sql = PythonOperator(
+    #     task_id="generate_merge_sql",
+    #     python_callable=generate_merge_sql,
+    # )
 
-    merge_backfill = BigQueryInsertJobOperator(
-        task_id="merge_backfill_to_main",
-        location="{{ ti.xcom_pull('load_backfill_config')['region'] }}",
-        configuration={
-            "query": {
-                "query": "{{ ti.xcom_pull(task_ids='generate_merge_sql', key='merge_sql') }}",
-                "useLegacySql": False,
-            }
-        },
-    )
+    # merge_backfill = BigQueryInsertJobOperator(
+    #     task_id="merge_backfill_to_main",
+    #     location=Variable.get("bq_location"),
+    #     configuration={
+    #         "query": {
+    #             "query": "{{ ti.xcom_pull(task_ids='generate_merge_sql', key='merge_sql') }}",
+    #             "useLegacySql": False,
+    #         }
+    #     },
+    # )
 
 
     end = EmptyOperator(task_id="end")
@@ -278,11 +296,7 @@ with DAG(
     (
         start
         >> load_cfg
-        >> extract_runtime
         >> start_backfill
         >> wait_for_backfill
-        >> fetch_columns
-        >> build_merge_sql
-        >> merge_backfill
         >> end
     )
