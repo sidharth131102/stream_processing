@@ -17,6 +17,7 @@ from pipeline.observability.trackers import TrackInput, TrackOutput
 from pipeline.observability.lag import TrackEventLag
 from pipeline.schema.schema_guard import SchemaGuard
 from pipeline.io_connectorss.source_factory import read_source
+from pipeline.transforms.late_data_filter import LateDataFilter
 from apache_beam.transforms.trigger import (
     AfterWatermark,AfterProcessingTime,
     Repeatedly,
@@ -53,7 +54,7 @@ def build_pipeline(p, cfg, subscription):
     # ==================================================
     parsed = (
         main
-        | "ParseEvent" >> beam.ParDo(ParseEvent(cfg["source"]))
+        | "ParseEvent" >> beam.ParDo(ParseEvent())
     )
 
     assigned = (
@@ -68,8 +69,19 @@ def build_pipeline(p, cfg, subscription):
     )
 
     event_time_dlq = assigned.dlq
+    # if cfg["job_mode"] == "streaming":
+    #     late_filtered = (
+    #         main
+    #         | "DropLateEvents"
+    #         >> beam.ParDo(
+    #             LateDataFilter(
+    #                 allowed_lateness_sec=streaming["windowing"]["allowed_lateness_sec"]
+    #             )
+    #         ).with_outputs("dlq", main="main")
+    #     )
 
-
+    #     main = late_filtered.main
+    #     late_dlq = late_filtered.dlq
 
     schema_checked = (
         main
@@ -105,14 +117,17 @@ def build_pipeline(p, cfg, subscription):
             )
 
             main = dedup_result.main
-
+            dedup_dlq = dedup_result.dropped
     elif cfg.get("job_mode") == "backfill":
         # Batch-safe dedup (NO STATE, NO TIMERS)
-        main = (
+        dedup_result = (
             main
             | "BatchDeduplicateLatest"
             >> BatchDeduplicateLatest()
         )
+
+        main = dedup_result.main
+        dedup_dlq = dedup_result.dropped
 
 
     # ==================================================
@@ -193,6 +208,9 @@ def build_pipeline(p, cfg, subscription):
             event_time_dlq
             | "TagEventTimeDLQ"
             >> beam.Map(lambda e: {"stage": "event_time", **e}),
+            # late_dlq
+            # | "TagLateDLQ"
+            # >> beam.Map(lambda e: {"stage": "late_data", **e}),
             transform_dlq
             | "TagTransformDLQ"
             >> beam.Map(lambda e: {"stage": "transform", **e}),
@@ -202,6 +220,10 @@ def build_pipeline(p, cfg, subscription):
             schema_dlq
             | "TagSchemaDLQ"
             >> beam.Map(lambda e: {"stage": "schema", **e}),
+            dedup_dlq
+            | "TagDedupDLQ"
+            >> beam.Map(lambda e: {"stage": "dedup", **e})
+
         )
         | "FlattenDLQ" >> beam.Flatten()
         | "WriteDLQ" >> WriteDLQ(dlq_topic)

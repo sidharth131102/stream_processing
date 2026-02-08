@@ -57,8 +57,6 @@ storage:
   - name: stream-accelerator-2-config
     description: Configuration files storage
     files:
-    - source: config/source_mapping.yaml
-      destination: source_mapping.yaml
     - source: config/destination_mapping.yaml
       destination: destination_mapping.yaml
     - source: config/transformation.yaml
@@ -92,7 +90,6 @@ pipeline_configs:
   config_directory: config
   bucket: stream-accelerator-2-config
   files:
-  - source_mapping.yaml
   - destination_mapping.yaml
   - transformation.yaml
   - validation.yaml
@@ -147,7 +144,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v153
+    tag: v164
     dockerfile: docker/Dockerfile
     context: .
 dataflow:

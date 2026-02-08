@@ -43,7 +43,6 @@ def load_all_configs(bucket: str):
 
 
     cfg = {
-        "source": _load_yaml("source_mapping.yaml"),
         "destination": _load_yaml("destination_mapping.yaml"),
         "transformations": _load_yaml("transformation.yaml"),
         "validation": _load_yaml("validation.yaml"),

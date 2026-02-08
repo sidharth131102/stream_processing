@@ -23,26 +23,30 @@ def _event_ts_as_float(event):
 
 
 def _pick_latest_and_track(kv):
-    """
-    kv: (event_id, Iterable[event])
-    """
-    events = list(kv[1])
+    event_id, events = kv
+    events = list(events)
 
-    # ✅ ADD: seen = number of records for this key
     for _ in events:
         PipelineMetrics.dedup_seen.inc()
 
     latest = max(events, key=_event_ts_as_float)
 
-    # ✅ ADD: emitted = 1
     PipelineMetrics.dedup_emitted.inc()
 
-    # ✅ ADD: dropped = rest
-    dropped_count = max(len(events) - 1, 0)
-    for _ in range(dropped_count):
-        PipelineMetrics.dedup_dropped.inc()
+    for e in events:
+        if e is not latest:
+            PipelineMetrics.dedup_dropped.inc()
+            yield beam.pvalue.TaggedOutput(
+                "dropped",
+                {
+                    "event": e,
+                    "reason": "batch_duplicate",
+                    "kept_event_ts": latest.get("event_ts"),
+                }
+            )
 
-    return latest
+    yield latest
+
 
 
 class BatchDeduplicateLatest(beam.PTransform):
@@ -57,5 +61,5 @@ class BatchDeduplicateLatest(beam.PTransform):
             pcoll
             | "KeyByEventId" >> beam.Map(lambda e: (e["event_id"], e))
             | "GroupByEventId" >> beam.GroupByKey()
-            | "PickLatestByEventTs" >> beam.Map(_pick_latest_and_track)
+            | "PickLatestByEventTs" >> beam.Map(_pick_latest_and_track).with_outputs("dropped", main="main")
         )

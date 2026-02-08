@@ -66,8 +66,14 @@ class _BufferedDedupDoFn(beam.DoFn):
             PipelineMetrics.dedup_dropped.inc()
             yield beam.pvalue.TaggedOutput(
                 "dropped",
-                None
+                {
+                    "event": event,
+                    "reason": "duplicate_or_older_event",
+                    "existing_ts": existing_ts,
+                    "incoming_ts": new_ts,
+                }
             )
+    
 
     @on_timer(emit_timer)
     def emit_final(

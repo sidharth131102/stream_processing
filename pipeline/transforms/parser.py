@@ -7,8 +7,6 @@ import logging
 from pipeline.observability.metrics import PipelineMetrics
 
 class ParseEvent(beam.DoFn):
-    def __init__(self, source_cfg):
-        self.source_cfg = source_cfg
         
     def process(self, element):
         try:
