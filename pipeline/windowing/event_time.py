@@ -1,29 +1,32 @@
 import apache_beam as beam
 from datetime import datetime, timezone
-import logging
 from apache_beam.utils.timestamp import Timestamp
+
 class AssignEventTime(beam.DoFn):
     def process(self, event):
+        ts = event.get("event_ts")
+
+        # 1️⃣ Type validation
+        if not isinstance(ts, str):
+            event["error"] = "event_ts is not a string"
+            event["_dlq_reason"] = "event_time_invalid_type"
+            yield beam.pvalue.TaggedOutput("dlq", event)
+            return  # 🔥 CRITICAL: stops retries
+
+        # 2️⃣ Parse validation
         try:
-            ts = event.get("event_ts")
-
-            if not isinstance(ts, str):
-                raise ValueError("event_ts must be ISO-8601 string")
-
             ts = ts.replace("Z", "+00:00")
             dt = datetime.fromisoformat(ts).astimezone(timezone.utc)
+        except Exception:
+            event["error"] = "Invalid ISO-8601 event_ts"
+            event["_dlq_reason"] = "event_time_parse_failed"
+            yield beam.pvalue.TaggedOutput("dlq", event)
+            return  # 🔥 CRITICAL: stops retries
 
-            # Keep for downstream usage (BQ, rules, etc.)
-            event["event_timestamp"] = dt.timestamp()
+        # 3️⃣ Happy path (ACK happens)
+        event["event_timestamp"] = dt.timestamp()
 
-            # 🔥 THIS IS THE KEY FIX
-            yield beam.window.TimestampedValue(event, Timestamp.from_utc_datetime(dt))
-
-        except Exception as e:
-            yield beam.pvalue.TaggedOutput(
-                "dlq",
-                {
-                    "event": event,
-                    "error": str(e),
-                },
-            )
+        yield beam.window.TimestampedValue(
+            event,
+            Timestamp.from_utc_datetime(dt)
+        )
