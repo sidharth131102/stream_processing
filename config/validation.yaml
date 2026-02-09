@@ -1,19 +1,104 @@
+# ------------------------------------------------------------------------------
+# VALIDATION CONFIGURATION
+# ------------------------------------------------------------------------------
+# This file defines WHAT makes an event valid or invalid.
+# It controls:
+# - Mandatory event-level fields
+# - Mandatory business (payload) fields
+# - Field length limits
+# - Basic data type validation
+#
+# IMPORTANT:
+# - Validation happens AFTER parsing but BEFORE transformations
+# - Failed validations send events to DLQ
+# - This file is SAFE to customize per client or schema
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# REQUIRED EVENT-LEVEL FIELDS
+# ------------------------------------------------------------------------------
+# These fields MUST exist in EVERY event.
+# They usually belong to the event envelope (metadata),
+# not inside the payload.
+#
+# If any of these are missing:
+# - The event is considered INVALID
+# - The event is routed to the DLQ
+#
+# Replace field names ONLY if your event envelope changes.
 required_fields:
-  - event_id
-  - event_type
-  - event_source
-  - event_ts
+  - event_id        # Unique identifier for the event
+  - event_type      # Type/category of the event
+  - event_source    # System that produced the event
+  - event_ts        # Event timestamp (used for ordering/windowing)
 
+# ------------------------------------------------------------------------------
+# REQUIRED PAYLOAD FIELDS
+# ------------------------------------------------------------------------------
+# These fields MUST exist inside the business payload.
+#
+# IMPORTANT:
+# - DO NOT prefix with "payload."
+# - Fields are validated AFTER flattening
+#
+# If any of these are missing:
+# - The event is marked INVALID
+# - Sent to the DLQ
+#
+# Modify this list when:
+# - Business requirements change
+# - New mandatory fields are introduced
 payload_required_fields:
-  - request_id      # ✅ NO "payload." prefix
-  - customer_id
-  - priority
+  - request_id      # Business request identifier
+  - customer_id     # Customer identifier
+  - priority        # Business priority (e.g., HIGH, MEDIUM, LOW)
 
+# ------------------------------------------------------------------------------
+# LENGTH VALIDATION RULES
+# ------------------------------------------------------------------------------
+# These rules limit the size of string fields.
+# Useful to:
+# - Prevent oversized text fields
+# - Protect downstream systems (BigQuery, dashboards)
+#
+# Format:
+#   <field_name>:
+#     max: <maximum_length>
+#
+# Fields must already exist at validation time.
 length_checks:
-  description:      # ✅ NO "payload." prefix
-    max: 500
+  description:      # Text field to validate
+    max: 500        # Maximum allowed characters
 
+# ------------------------------------------------------------------------------
+# TYPE VALIDATION RULES
+# ------------------------------------------------------------------------------
+# Ensures fields contain values of expected data types.
+#
+# Supported types depend on pipeline implementation
+# (e.g., STRING, INTEGER, FLOAT, BOOLEAN, TIMESTAMP).
+#
+# If type validation fails:
+# - Event is marked INVALID
+# - Routed to DLQ
+#
+# Modify when:
+# - Field types change
+# - New type validations are required
 type_checks:
-  priority: STRING  # ✅ NO "payload." prefix
+  priority: STRING  # Priority must be a string value
 
-#this file can be changes based on requirements/scenario specifally for payload fields
+# ------------------------------------------------------------------------------
+# NOTE
+# ------------------------------------------------------------------------------
+# This file WILL change per client and per schema version.
+#
+# Safe modifications:
+# - Add/remove required fields
+# - Change length limits
+# - Add new type checks
+#
+# Unsafe modifications:
+# ❌ Do NOT rename top-level sections
+# ❌ Do NOT add "payload." prefixes
+# ------------------------------------------------------------------------------

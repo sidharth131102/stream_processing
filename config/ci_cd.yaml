@@ -1,29 +1,106 @@
+# ------------------------------------------------------------------------------
+# CI / CD CONFIGURATION (GitHub Actions → GCP)
+# ------------------------------------------------------------------------------
+# This file defines how GitHub Actions is allowed to:
+# - Authenticate to Google Cloud
+# - Build Docker images
+# - Push images to Artifact Registry
+# - Create / update Dataflow Flex Templates
+#
+# IMPORTANT:
+# - No pipeline logic lives here
+# - This file is used ONLY during CI/CD bootstrap and deployments
+# - Safe to modify when moving to a new project or GitHub repo
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# GOOGLE CLOUD PROJECT DETAILS
+# ------------------------------------------------------------------------------
 gcp:
   project_id: stream-accelerator-2
-  project_number: "123456789012"
-  region: us-central1
+  # GCP project where:
+  # - Artifact Registry exists
+  # - Dataflow templates are created
+  # - CI/CD service account lives
 
+  project_number: "123456789012"
+  # Numeric project identifier (NOT the project ID)
+  # Required for Workload Identity Federation setup
+  # Replace with your actual GCP project number
+
+  region: us-central1
+  # Primary region for Artifact Registry and Dataflow templates
+
+# ------------------------------------------------------------------------------
+# GITHUB REPOSITORY DETAILS
+# ------------------------------------------------------------------------------
 github:
   org: your-github-org
-  repo: stream-accelerator
-  branch: main
+  # GitHub organization or username that owns the repository
 
+  repo: stream-accelerator
+  # GitHub repository name (must match the repo using this config)
+
+  branch: main
+  # Branch that triggers CI/CD workflows (usually main or release)
+
+# ------------------------------------------------------------------------------
+# CI/CD SERVICE ACCOUNT (GCP)
+# ------------------------------------------------------------------------------
+# This service account is impersonated by GitHub Actions.
+# GitHub NEVER stores service account keys.
 service_account:
   name: github-ci-cd
-  display_name: "GitHub Actions CI/CD SA"
+  # Name of the service account to create in GCP
 
+  display_name: "GitHub Actions CI/CD SA"
+  # Human-readable description (optional but recommended)
+
+# ------------------------------------------------------------------------------
+# WORKLOAD IDENTITY FEDERATION (KEYLESS AUTH)
+# ------------------------------------------------------------------------------
+# Enables secure authentication from GitHub → GCP
+# without using long-lived service account keys
 workload_identity:
   pool_id: github-pool
-  provider_id: github-provider
+  # Identity pool name in GCP
 
+  provider_id: github-provider
+  # Identity provider linked to GitHub OIDC tokens
+
+# ------------------------------------------------------------------------------
+# IAM ROLES ASSIGNED TO CI/CD SERVICE ACCOUNT
+# ------------------------------------------------------------------------------
+# These permissions allow GitHub Actions to:
+# - Build and deploy Dataflow templates
+# - Push Docker images
+# - Manage IAM bindings
 roles:
   - roles/dataflow.admin
-  - roles/storage.admin
-  - roles/artifactregistry.admin
-  - roles/iam.serviceAccountUser
-  - roles/iam.workloadIdentityUser
-  - roles/logging.logWriter
+  # Create and manage Dataflow templates and jobs
 
+  - roles/storage.admin
+  # Upload templates and artifacts to GCS
+
+  - roles/artifactregistry.admin
+  # Push and manage Docker images
+
+  - roles/iam.serviceAccountUser
+  # Allow impersonation of service accounts
+
+  - roles/iam.workloadIdentityUser
+  # Required for Workload Identity Federation
+
+  - roles/logging.logWriter
+  # Write logs during CI/CD execution
+
+# ------------------------------------------------------------------------------
+# ARTIFACT REGISTRY SETTINGS
+# ------------------------------------------------------------------------------
+# Docker images built by CI/CD are pushed here
 artifact_registry:
   repo_name: dataflow-templates
+  # Artifact Registry repository name
+
   location: us-central1
+  # Must match the region where Artifact Registry is created

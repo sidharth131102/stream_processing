@@ -1,103 +1,130 @@
-# --------------------------------------------------
-# Cloud Composer Control Plane
-# --------------------------------------------------
+# ------------------------------------------------------------------------------
+# CLOUD COMPOSER CONTROL PLANE CONFIGURATION
+# ------------------------------------------------------------------------------
 # This file defines EVERYTHING related to orchestration:
-# - Project identity
-# - Composer environment
-# - Composer service account
-# - IAM roles
-# - Airflow variables
-# - DAG deployment strategy
+# - Which GCP project Composer runs in
+# - How the Composer environment is created
+# - Which service account runs Airflow DAGs
+# - IAM permissions required by DAGs
+# - Airflow variables consumed by pipelines
+# - How DAGs are deployed into Composer
 #
-# This file is intended to be uploaded to the same
-# config bucket as pipeline.yaml
-# --------------------------------------------------
+# IMPORTANT:
+# This file is uploaded to the SAME config bucket as pipeline.yaml
+# and is read dynamically during Composer setup.
+# ------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------
+# PROJECT IDENTIFICATION
+# ------------------------------------------------------------------------------
+# Identifies the GCP project where the Composer environment will live.
+# These values MUST match the project used in pipeline.yaml.
 project:
-  id: stream-accelerator-2
-  number: 529975900001
+  id: stream-accelerator-2          # GCP Project ID (REPLACE per environment)
+  number: 529975900001              # GCP Project Number (DO NOT GUESS – fetch from GCP)
 
+# ------------------------------------------------------------------------------
+# COMPOSER ENVIRONMENT DEFINITION
+# ------------------------------------------------------------------------------
 composer:
   environment:
-    name: data-platform-dev-c3
-    region: us-east1
+    name: data-platform-dev-c3      # Composer environment name (unique per project/region)
+    region: us-east1                # Composer region (can differ from Dataflow region)
 
     # Cloud Composer v3 image
+    # Ties the Airflow version and Python runtime.
+    # Upgrade ONLY after validating DAG compatibility.
     image_version: composer-3-airflow-2.10.5
 
-    # Small / medium / large
+    # Environment sizing:
+    # small  → dev / low traffic
+    # medium → staging
+    # large  → production
     environment_size: small
 
-    # Optional labels (recommended for platforms)
+    # Optional labels (highly recommended for platform teams)
+    # Used for cost tracking, ownership, and governance.
     labels:
       platform: stream-accelerator-2
       env: dev
       owner: data-platform
 
-  # --------------------------------------------------
-  # Composer Service Account
-  # --------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # COMPOSER SERVICE ACCOUNT
+  # ----------------------------------------------------------------------------
+  # This service account executes ALL Airflow DAG tasks.
+  # It must have permissions to:
+  # - Start/stop Dataflow jobs
+  # - Read/write Pub/Sub
+  # - Read/write GCS
+  # - Create and manage BigQuery jobs
   service_account:
-    name: composer-sa
+    name: composer-sa               # Service account name (auto-created)
     display_name: Cloud Composer Service Account
 
-    # Roles required for DAG execution
-    # (Dataflow, Pub/Sub, GCS, BigQuery)
+    # IAM roles required for DAG execution
+    # WARNING:
+    # Removing roles may break DAGs at runtime.
     roles:
-      - roles/composer.worker
-      - roles/dataflow.admin
-      - roles/dataflow.worker
-      - roles/pubsub.subscriber
-      - roles/pubsub.publisher
-      - roles/pubsub.viewer
-      - roles/storage.objectAdmin
-      - roles/bigquery.jobUser
-      - roles/bigquery.dataViewer
-      - roles/bigquery.dataEditor
-      - roles/iam.serviceAccountUser
+      - roles/composer.worker       # Required for Airflow task execution
+      - roles/dataflow.admin        # Required to create/stop Dataflow jobs
+      - roles/dataflow.worker       # Required for Dataflow interaction
+      - roles/pubsub.subscriber     # Required to read from Pub/Sub
+      - roles/pubsub.publisher      # Required to publish to Pub/Sub (DLQ)
+      - roles/pubsub.viewer         # Required for Pub/Sub metadata
+      - roles/storage.objectAdmin   # Required to manage GCS objects
+      - roles/bigquery.jobUser      # Required to run BigQuery jobs
+      - roles/bigquery.dataViewer   # Required to read BigQuery tables
+      - roles/bigquery.dataEditor   # Required to write BigQuery tables
+      - roles/iam.serviceAccountUser# Required to impersonate Dataflow SAs
 
-  # --------------------------------------------------
-  # Composer Service Agent (v3 requirement)
-  # --------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # COMPOSER SERVICE AGENT (REQUIRED FOR COMPOSER v3)
+  # ----------------------------------------------------------------------------
+  # This is a Google-managed service agent.
+  # DO NOT MODIFY unless the project number changes.
   service_agent:
     email: service-529975900001@cloudcomposer-accounts.iam.gserviceaccount.com
     roles:
       - roles/composer.ServiceAgentV2Ext
 
-  # --------------------------------------------------
-  # Airflow Runtime Configuration
-  # --------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # AIRFLOW RUNTIME CONFIGURATION
+  # ----------------------------------------------------------------------------
   airflow:
     variables:
-      # Used by all DAGs to load pipeline.yaml dynamically
-      config_bucket: stream-accelerator-2-config
-      pipeline_yaml_path: pipeline.yaml
-      bq_location: us-central1
+      # These Airflow variables are read by ALL DAGs.
+      # They allow DAGs to dynamically load pipeline configuration
+      # without hardcoding any paths.
+      config_bucket: stream-accelerator-2-config   # GCS bucket holding config YAMLs
+      pipeline_yaml_path: pipeline.yaml             # Entry-point pipeline config file
+      bq_location: us-central1                      # BigQuery dataset location
 
-    # Optional: default Airflow config overrides
+    # Optional Airflow configuration overrides.
+    # Safe defaults are used here.
     config_overrides:
-      core.load_examples: "False"
-      webserver.expose_config: "True"
+      core.load_examples: "False"       # Disable example DAGs
+      webserver.expose_config: "True"   # Allows viewing config in UI (dev-friendly)
 
-  # --------------------------------------------------
-  # DAG Deployment
-  # --------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # DAG DEPLOYMENT STRATEGY
+  # ----------------------------------------------------------------------------
   dags:
-    # Local path in repo
+    # Local path in the repository where DAG files live.
     local_path: dags/
 
-    # Deployment strategy:
-    # - rsync  → sync and delete stale DAGs (recommended)
-    # - overwrite → simple copy
+    # DAG deployment strategy:
+    # rsync     → syncs DAGs and deletes removed ones (RECOMMENDED)
+    # overwrite → copies files without cleanup
     sync_strategy: rsync
 
-    # DAG folder inside Composer bucket
+    # Path inside the Composer GCS bucket where DAGs are stored.
     remote_path: dags/
 
-  # --------------------------------------------------
-  # Validation & Safety
-  # --------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # VALIDATION & SAFETY CHECKS
+  # ----------------------------------------------------------------------------
   validation:
-    fail_if_env_exists: false
-    verify_bucket_owner: true
-    verify_airflow_variables: true
+    fail_if_env_exists: false        # If true, setup fails when env already exists
+    verify_bucket_owner: true        # Ensures config bucket belongs to this project
+    verify_airflow_variables: true   # Ensures required Airflow vars are present

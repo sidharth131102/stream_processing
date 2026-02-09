@@ -1,31 +1,153 @@
+# ------------------------------------------------------------------------------
+# TRANSFORMATION CONFIGURATION
+# ------------------------------------------------------------------------------
+# This file defines HOW the incoming event payload is transformed.
+# It controls:
+# - Field flattening (moving fields from payload → top level)
+# - Business rule derivations
+# - Data enrichment (adding new fields)
+# - Entity extraction from text fields
+#
+# IMPORTANT:
+# - This file ONLY affects transformations
+# - No infrastructure changes happen here
+# - Safe to modify for client-specific logic
+# ------------------------------------------------------------------------------
+
 field_mapping:
+  # --------------------------------------------------------------------------
+  # FIELD FLATTENING & RENAMING
+  # --------------------------------------------------------------------------
+  # Purpose:
+  # Incoming events usually have a nested structure like:
+  # {
+  #   "payload": {
+  #     "request_id": "...",
+  #     "customer_id": "...",
+  #     ...
+  #   }
+  # }
+  #
+  # These mappings FLATTEN fields from "payload.*"
+  # and bring them to the top-level record.
+  #
+  # Format:
+  #   <target_field>: <source_path>
+  #
+  # You can:
+  # - Rename fields
+  # - Drop fields by removing mappings
+  # - Add new mappings as needed
+  # --------------------------------------------------------------------------
+
   #event_time: event_timestamp  
-  # 🔥 Flatten payload fields to root level
-  request_id: payload.request_id
-  customer_id: payload.customer_id
-  request_type: payload.request_type
-  priority: payload.priority
-  location: payload.location
-  description: payload.description
-  source_system: payload.source_system
+  # (Optional) Example of mapping an event timestamp field
+  # Uncomment only if your payload has event_timestamp
+
+  request_id: payload.request_id        # Unique identifier for the request
+  customer_id: payload.customer_id      # Customer identifier
+  request_type: payload.request_type    # Type/category of request
+  priority: payload.priority            # Business priority (e.g., HIGH, LOW)
+  location: payload.location            # Physical or logical location
+  description: payload.description      # Free-text description
+  source_system: payload.source_system  # Originating system name
+
+# ------------------------------------------------------------------------------
+# BUSINESS RULES
+# ------------------------------------------------------------------------------
+# Purpose:
+# Business rules allow you to DERIVE new fields based on conditions.
+#
+# Rules are evaluated AFTER field mapping.
+#
+# Format:
+# - condition: Python-like expression
+# - output_field: Name of new field to create
+# - value: Value assigned when condition is true
+#
+# You can:
+# - Add multiple rules
+# - Create flags, scores, or categories
+# ------------------------------------------------------------------------------
 
 business_rules:
   - condition: "event.get('priority') == 'HIGH'"
+    # If priority is HIGH, mark this request as critical
+
     output_field: is_critical
+    # New field added to the record
+
     value: true
+    # Value assigned when condition evaluates to true
+
+# ------------------------------------------------------------------------------
+# ENRICHMENT
+# ------------------------------------------------------------------------------
+# Purpose:
+# Enrichment adds NEW information that does not exist in the event.
+# Typically used for:
+# - Region mapping
+# - Category classification
+# - Business group assignment
+#
+# Enrichment runs AFTER field mapping and business rules.
+# ------------------------------------------------------------------------------
 
 enrichment:
   - type: static_lookup
-    input_field: "location"        # ✅ FIXED: uses FLATTENED field
+    # static_lookup means a fixed key-value mapping defined in YAML
+
+    input_field: "location"
+    # This field MUST already exist (comes from field_mapping)
+
     lookup:
+      # Mapping of input values → enriched values
       Bangalore: SOUTH
       Mumbai: WEST
-    output_field: region
 
-entity_extraction:                  # ✅ ADDED: was missing
-  - field: "description"           # ✅ Uses FLATTENED field
+    output_field: region
+    # New field created based on lookup result
+
+# ------------------------------------------------------------------------------
+# ENTITY EXTRACTION
+# ------------------------------------------------------------------------------
+# Purpose:
+# Extracts structured information from unstructured text fields
+# using regular expressions.
+#
+# Common use cases:
+# - Detect equipment names
+# - Extract keywords
+# - Identify error types from descriptions
+#
+# Runs AFTER enrichment.
+# ------------------------------------------------------------------------------
+
+entity_extraction:
+  - field: "description"
+    # Text field from which entities are extracted
+    # Must already exist (flattened earlier)
+
     entities:
       - name: equipment
-        pattern: "(transformer|meter|cable)"
+        # Name of the extracted entity field
 
-#this file can be changes based on requirements/scenario
+        pattern: "(transformer|meter|cable)"
+        # Regex pattern used to identify keywords
+        # Case-insensitive matching handled in code
+
+# ------------------------------------------------------------------------------
+# NOTE
+# ------------------------------------------------------------------------------
+# This file is EXPECTED to change between clients and use cases.
+#
+# Safe modifications:
+# - Add/remove field mappings
+# - Change business rules
+# - Add new enrichment logic
+# - Modify regex patterns
+#
+# Unsafe modifications:
+# ❌ Do NOT change structure keys (field_mapping, enrichment, etc.)
+# ❌ Do NOT rename root sections unless code is updated
+# ------------------------------------------------------------------------------

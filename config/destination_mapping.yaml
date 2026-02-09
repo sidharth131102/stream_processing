@@ -1,22 +1,102 @@
+# ------------------------------------------------------------------------------
+# DESTINATION MAPPING CONFIGURATION
+# ------------------------------------------------------------------------------
+# This file defines WHERE the processed data finally lands.
+# It controls:
+# - Target BigQuery table for streaming data
+# - Temporary tables used during backfill jobs
+# - How event metadata is handled
+# - How unknown / dynamic fields are treated
+# - Where failed records (DLQ) are sent
+#
+# IMPORTANT:
+# This file DOES NOT control transformations or validations.
+# It only controls destination behavior.
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# FINAL TARGET TABLE (PRIMARY OUTPUT)
+# ------------------------------------------------------------------------------
+# This is the MAIN BigQuery table where valid, processed events are written.
+# Replace these values if:
+# - You deploy to another project
+# - You use a different dataset
+# - You want a different final table name
 target:
-  project: stream-accelerator-2
-  dataset: analytics
-  table: service_requests
+  project: stream-accelerator-2     # GCP project where BigQuery dataset exists
+  dataset: analytics                # BigQuery dataset name
+  table: service_requests           # Final output table for streaming data
 
+# ------------------------------------------------------------------------------
+# TEMPORARY TABLE SETTINGS (USED FOR BACKFILL / REPROCESSING)
+# ------------------------------------------------------------------------------
+# When running BACKFILL jobs, data is first written to temporary tables
+# to avoid impacting the main streaming table.
+#
+# The final temp table name will be:
+#   <table_prefix>_<timestamp or batch_id>
+#
+# Example:
+#   service_requests_backfill_20240201
 temp_table:
-  dataset: analytics
-  table_prefix: service_requests_backfill
+  dataset: analytics                # Dataset for temporary backfill tables
+  table_prefix: service_requests_backfill  # Prefix for generated temp tables
 
+# ------------------------------------------------------------------------------
+# ENVELOPE / METADATA FIELDS
+# ------------------------------------------------------------------------------
+# These fields are NOT part of the original event payload.
+# They are automatically added by Apache Beam / Dataflow.
+#
+# WARNING:
+# Do NOT map business fields here.
+# Only Beam-generated metadata fields belong in this section.
 envelope_fields:
-  beam_event_time: TIMESTAMP   # ONLY Beam-added fields
-  beam_processing_time: TIMESTAMP   # ONLY Beam-added fields
+  beam_event_time: TIMESTAMP        # Event time assigned by Beam (for windowing)
+  beam_processing_time: TIMESTAMP   # Actual processing time inside Dataflow
 
+# ------------------------------------------------------------------------------
+# PAYLOAD HANDLING POLICY
+# ------------------------------------------------------------------------------
+# Controls how incoming event fields are interpreted when schema
+# evolution or dynamic fields are enabled.
 payload_policy:
-  mode: DYNAMIC
-  default_type: STRING
+  mode: DYNAMIC                     # DYNAMIC allows new fields without failures
+  default_type: STRING              # Type assigned to unknown/new fields
 
-schema_mode: FINAL_OUTPUT
+# Modes explanation:
+# - DYNAMIC → Allows schema evolution (recommended for streaming)
+# - STRICT  → Rejects unknown fields (not recommended for evolving schemas)
 
+# ------------------------------------------------------------------------------
+# SCHEMA MODE
+# ------------------------------------------------------------------------------
+# Defines which schema version is used for writing to BigQuery.
+schema_mode: FINAL_OUTPUT           # FINAL_OUTPUT = after transformations + validation
+
+# Possible values:
+# - RAW_INPUT     → Before transformations (rarely used)
+# - FINAL_OUTPUT  → Cleaned, validated schema (recommended)
+
+# ------------------------------------------------------------------------------
+# DEAD LETTER QUEUE (DLQ)
+# ------------------------------------------------------------------------------
+# Any event that fails validation, schema enforcement,
+# or critical processing is routed here.
+#
+# Replace ONLY if:
+# - Project changes
+# - DLQ topic name changes
 dlq_topic: projects/stream-accelerator-2/topics/json-events-dlq
 
-#this file can be changes based on requirements/scenario
+# ------------------------------------------------------------------------------
+# NOTE
+# ------------------------------------------------------------------------------
+# This file CAN and SHOULD change based on:
+# - New destination tables
+# - New datasets
+# - Backfill vs streaming requirements
+# - Schema evolution strategy
+#
+# It is SAFE to modify when requirements change.
+# ------------------------------------------------------------------------------
