@@ -83,7 +83,7 @@ def load_backfill_config(**context):
         "num_workers": int(backfill_job_cfg.get("num_workers", 2)),
         "max_workers": int(backfill_job_cfg.get("max_workers", 4)),
         "machine_type": backfill_job_cfg.get("worker_machine_type", "e2-standard-4"),
-
+        "experiments": job_cfg.get("experiments", []),
         "parameters": {
             **base_parameters,
             "job_mode": "backfill",
@@ -117,7 +117,7 @@ def build_backfill_body(context, **_):
                 "machineType": cfg["machine_type"],
                 "stagingLocation": cfg["staging_location"],
                 "tempLocation": cfg["temp_location"],
-                "additionalExperiments": ["use_runner_v2"],
+                "additionalExperiments": cfg.get("experiments", []),
             },
         }
     }

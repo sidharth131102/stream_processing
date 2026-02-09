@@ -25,6 +25,10 @@ apis:
 - artifactregistry.googleapis.com    # Required for Docker images
 - iam.googleapis.com                 # Required for service account & IAM setup
 - cloudresourcemanager.googleapis.com# Required for project-level resource management
+- datalineage.googleapis.com             # Required for Data Catalog lineage tracking
+- datacatalog.googleapis.com             # Required for Data Catalog metadata management
+- dataplex.googleapis.com             # Required for Dataplex integration (optional)
+
 
 # ------------------------------------------------------------------------------
 # VPC SERVICE CONTROLS (OPTIONAL SECURITY HARDENING)
@@ -76,6 +80,9 @@ service_account:
   - roles/storage.objectAdmin         # Required for GCS temp/staging
   - roles/artifactregistry.reader     # Required to pull pipeline image
   - roles/dataflow.worker             # (Duplicate is harmless, but intentional here)
+  - roles/datalineage.producer           # Required for Data Catalog lineage tracking
+  - roles/datacatalog.viewer          # Required for Data Catalog metadata management
+  - roles/datalineage.viewer             # Required for Data Catalog lineage viewing
 
 # ------------------------------------------------------------------------------
 # CLOUD STORAGE (GCS) BUCKETS
@@ -241,7 +248,9 @@ dataflow:
 
     experiments:
     - use_runner_v2
-    - enable_vertical_autoscaling
+    - enable_vertical_autoscaling=true
+    - enable_lineage=true            # Enable Data Catalog lineage tracking
+
 
 # ------------------------------------------------------------------------------
 # STREAMING PERFORMANCE TUNING

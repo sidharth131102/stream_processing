@@ -63,6 +63,7 @@ def load_pipeline_yaml(**context):
         "enable_streaming_engine": bool(
             job_cfg.get("enable_streaming_engine", True)
         ),
+        "experiments": job_cfg.get("experiments", []),
         # CRITICAL: Explicit staging for Flex Template
         "staging_location": job_cfg["staging_location"],
         "temp_location": job_cfg["temp_location"],
@@ -121,10 +122,7 @@ def build_flex_template_body(context, **_):
         "enableStreamingEngine": cfg["enable_streaming_engine"],
         "stagingLocation": cfg["staging_location"],
         "tempLocation": cfg["temp_location"],
-        "additionalExperiments": [
-            "use_runner_v2",
-            "enable_vertical_autoscaling",
-        ],
+        "additionalExperiments": cfg.get("experiments", []),
     }
 
     # -------------------------------------------------
