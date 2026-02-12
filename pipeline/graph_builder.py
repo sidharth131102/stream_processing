@@ -69,19 +69,19 @@ def build_pipeline(p, cfg, subscription):
     )
 
     event_time_dlq = assigned.dlq
-    if cfg["job_mode"] == "streaming":
-        late_filtered = (
-            main
-            | "DropLateEvents"
-            >> beam.ParDo(
-                LateDataFilter(
-                    allowed_lateness_sec=streaming["windowing"]["allowed_lateness_sec"]
-                )
-            ).with_outputs("dlq", main="main")
-        )
+    # if cfg["job_mode"] == "streaming":
+    #     late_filtered = (
+    #         main
+    #         | "DropLateEvents"
+    #         >> beam.ParDo(
+    #             LateDataFilter(
+    #                 allowed_lateness_sec=streaming["windowing"]["allowed_lateness_sec"]
+    #             )
+    #         ).with_outputs("dlq", main="main")
+    #     )
 
-        main = late_filtered.main
-        late_dlq = late_filtered.dlq
+    #     main = late_filtered.main
+    #     late_dlq = late_filtered.dlq
 
     schema_checked = (
         main
@@ -208,9 +208,9 @@ def build_pipeline(p, cfg, subscription):
             event_time_dlq
             | "TagEventTimeDLQ"
             >> beam.Map(lambda e: {"stage": "event_time", **e}),
-            late_dlq
-            | "TagLateDLQ"
-            >> beam.Map(lambda e: {"stage": "late_data", **e}),
+            # late_dlq
+            # | "TagLateDLQ"
+            # >> beam.Map(lambda e: {"stage": "late_data", **e}),
             transform_dlq
             | "TagTransformDLQ"
             >> beam.Map(lambda e: {"stage": "transform", **e}),

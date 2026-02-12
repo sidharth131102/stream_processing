@@ -2,7 +2,7 @@ import re
 
 class EntityExtractor:
     def __init__(self, configs):
-        self.configs = configs
+        self.configs = configs or []
 
     def apply(self, event):
         for cfg in self.configs:

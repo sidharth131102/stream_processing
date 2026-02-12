@@ -79,7 +79,14 @@ business_rules:
 
     value: true
     # Value assigned when condition evaluates to true
+  - condition: "event.get('request_type') == 'TEMPERATURE_ALERT'"
+    # If request type is refund, assign a risk score
 
+    output_field: urgency
+    # New field for urgency assessment
+
+    value: true
+    # Example urgency flag for temperature alerts
 # ------------------------------------------------------------------------------
 # ENRICHMENT
 # ------------------------------------------------------------------------------
@@ -104,6 +111,8 @@ enrichment:
       # Mapping of input values → enriched values
       Bangalore: SOUTH
       Mumbai: WEST
+      Delhi: NORTH
+      Assam: EAST
 
     output_field: region
     # New field created based on lookup result

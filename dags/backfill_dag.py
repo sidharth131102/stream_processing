@@ -10,10 +10,7 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.models.param import Param
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
-from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.operators.dataflow import DataflowStartFlexTemplateOperator
-from airflow.providers.google.cloud.sensors.dataflow import DataflowJobStatusSensor
-from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 from airflow.providers.google.cloud.hooks.dataflow import DataflowHook
 
 # --------------------------------------------------
@@ -123,69 +120,6 @@ def build_backfill_body(context, **_):
     }
 
 
-# --------------------------------------------------
-# Helper: Fetch target table columns
-# --------------------------------------------------
-# def fetch_target_columns(**context):
-#     ti = context["ti"]
-#     cfg = ti.xcom_pull(task_ids="load_backfill_config")
-
-#     hook = BigQueryHook(
-#         location=Variable.get("bq_location"),          # ✅ REQUIRED for regional datasets
-#         use_legacy_sql=False,
-#     )
-
-#     sql = f"""
-#     SELECT column_name
-#     FROM {cfg['project_id']}.{cfg['target_dataset']}.INFORMATION_SCHEMA.COLUMNS
-#     WHERE table_name = '{cfg['target_table']}'
-#     ORDER BY ordinal_position
-#     """
-
-#     rows = hook.get_records(sql)
-#     columns = [r[0] for r in rows]
-
-#     if "event_id" not in columns:
-#         raise ValueError("event_id must exist in target table")
-
-#     ti.xcom_push(key="columns", value=columns)
-# --------------------------------------------------
-# Helper: Generate MERGE SQL
-# --------------------------------------------------
-# def generate_merge_sql(**context):
-#     ti = context["ti"]
-#     cfg = ti.xcom_pull(task_ids="load_backfill_config")
-#     columns = ti.xcom_pull(task_ids="fetch_target_columns", key="columns")
-
-#     immutable = {"event_id", "beam_event_time", "beam_processing_time"}
-
-#     mutable = [c for c in columns if c not in immutable]
-
-#     update_block = ""
-#     if mutable:
-#         update_block = (
-#             "WHEN MATCHED THEN UPDATE SET\n    "
-#             + ",\n    ".join(f"{c}=S.{c}" for c in mutable)
-#         )
-
-#     insert_cols = ", ".join(columns)
-#     insert_vals = ", ".join(f"S.{c}" for c in columns)
-
-#     temp_table = f"{cfg['temp_table_prefix']}_{cfg['run_id']}"
-
-#     sql = f"""
-#     MERGE `{cfg['project_id']}.{cfg['target_dataset']}.{cfg['target_table']}` T
-#     USING `{cfg['project_id']}.{cfg['temp_dataset']}.{temp_table}` S
-#     ON T.event_id = S.event_id
-#     {update_block}
-#     WHEN NOT MATCHED THEN
-#       INSERT ({insert_cols})
-#       VALUES ({insert_vals})
-#     """
-
-#     ti.xcom_push(key="merge_sql", value=sql)
-
-
 
 def wait_for_dataflow_job(**context):
     ti = context["ti"]
@@ -268,28 +202,6 @@ with DAG(
         task_id="wait_for_backfill_completion",
         python_callable=wait_for_dataflow_job,
     )
-
-    # fetch_columns = PythonOperator(
-    #     task_id="fetch_target_columns",
-    #     python_callable=fetch_target_columns,
-    # )
-
-    # build_merge_sql = PythonOperator(
-    #     task_id="generate_merge_sql",
-    #     python_callable=generate_merge_sql,
-    # )
-
-    # merge_backfill = BigQueryInsertJobOperator(
-    #     task_id="merge_backfill_to_main",
-    #     location=Variable.get("bq_location"),
-    #     configuration={
-    #         "query": {
-    #             "query": "{{ ti.xcom_pull(task_ids='generate_merge_sql', key='merge_sql') }}",
-    #             "useLegacySql": False,
-    #         }
-    #     },
-    # )
-
 
     end = EmptyOperator(task_id="end")
 

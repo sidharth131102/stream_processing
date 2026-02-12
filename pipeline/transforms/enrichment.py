@@ -1,6 +1,6 @@
 class Enrichment:
     def __init__(self, enrichments):
-        self.enrichments = enrichments
+        self.enrichments = enrichments or []
 
     def apply(self, event):
         for e in self.enrichments:

@@ -15,12 +15,12 @@ class SoftValidate(beam.DoFn):
         errors = []
 
         # 1️⃣ Required envelope fields
-        for field in self.cfg.get("required_fields", []):
+        for field in (self.cfg.get("required_fields") or []):
             if field not in event or event[field] in (None, ""):
                 errors.append(f"Missing required field: {field}")
 
         # 2️⃣ Required payload fields (FIXED: Check root level after FieldMapper flattening)
-        for field in self.cfg.get("payload_required_fields", []):
+        for field in (self.cfg.get("payload_required_fields") or []):
             if field not in event or event[field] in (None, ""):
                 errors.append(f"Missing required payload field: {field}")
 
@@ -37,14 +37,27 @@ class SoftValidate(beam.DoFn):
                     errors.append("event_ts is not a valid ISO-8601 timestamp")
 
         # 4️⃣ Length checks
-        for field, rules in self.cfg.get("length_checks", {}).items():
+        for field, rules in (self.cfg.get("length_checks") or {}).items():
             value = event.get(field)
-            if isinstance(value, str):
-                if "max" in rules and len(value) > rules["max"]:
-                    errors.append(f"{field} exceeds max length")
+
+            if value is None:
+                continue
+
+            if not isinstance(value, str):
+                value = str(value)
+
+            if "max" in rules and len(value) > rules["max"]:
+                errors.append(f"{field} exceeds max length")
+
+            if "min" in rules and len(value) < rules["min"]:
+                errors.append(f"{field} below min length")
+
+            if "equal" in rules and len(value) != rules["equal"]:
+                errors.append(f"{field} must be exactly {rules['equal']} characters")
+
 
         # 5️⃣ Type checks (soft, non-blocking)
-        for field, expected in self.cfg.get("type_checks", {}).items():
+        for field, expected in (self.cfg.get("type_checks") or {}).items():
             value = event.get(field)
             if value is None:
                 continue

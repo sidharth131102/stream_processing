@@ -1,46 +1,27 @@
-# ------------------------------------------------------------------------------
-# PROJECT METADATA
-# ------------------------------------------------------------------------------
-# This section defines the GCP project and region where ALL resources
-# (Dataflow, Pub/Sub, BigQuery, Composer, etc.) will be created.
-# Replace these values when deploying to a different GCP project or region.
 project:
-  id: stream-accelerator-2          # GCP Project ID (REPLACE for each client/environment)
-  region: us-central1               # Primary GCP region
-  location: us-central1             # Resource location (usually same as region)
-
-# ------------------------------------------------------------------------------
-# REQUIRED GCP APIS
-# ------------------------------------------------------------------------------
-# These APIs are automatically enabled as part of infra_setup.py.
-# DO NOT remove entries unless you know the pipeline does not use that service.
+  id: stream-accelerator-2
+  region: us-central1
+  location: us-central1
 apis:
-- dataflow.googleapis.com            # Required to run Apache Beam pipelines
-- pubsub.googleapis.com              # Required for event ingestion & DLQ
-- bigquery.googleapis.com            # Required for analytics storage
-- storage.googleapis.com             # Required for GCS buckets (configs, templates, temp)
-- logging.googleapis.com             # Required for structured logs
-- composer.googleapis.com            # Required for Cloud Composer (Airflow)
-- monitoring.googleapis.com          # Required for metrics & alerts
-- artifactregistry.googleapis.com    # Required for Docker images
-- iam.googleapis.com                 # Required for service account & IAM setup
+- dataflow.googleapis.com
+- pubsub.googleapis.com
+- bigquery.googleapis.com
+- storage.googleapis.com
+- logging.googleapis.com
+- composer.googleapis.com
+- monitoring.googleapis.com
+- artifactregistry.googleapis.com
+- iam.googleapis.com
 - cloudresourcemanager.googleapis.com# Required for project-level resource management
-- datalineage.googleapis.com             # Required for Data Catalog lineage tracking
-- datacatalog.googleapis.com             # Required for Data Catalog metadata management
-- dataplex.googleapis.com             # Required for Dataplex integration (optional)
-
-
-# ------------------------------------------------------------------------------
-# VPC SERVICE CONTROLS (OPTIONAL SECURITY HARDENING)
-# ------------------------------------------------------------------------------
-# Used only in highly restricted enterprise environments.
-# For most users, keep this DISABLED.
+- datalineage.googleapis.com
+- datacatalog.googleapis.com
+- dataplex.googleapis.com
 vpc_sc:
-  enabled: false                     # Set true only if VPC Service Controls are required
-  mode: dry_run                      # dry_run allows testing without blocking traffic
+  enabled: false
+  mode: dry_run
   perimeter_name: stream-accelerator-2-perimeter
   access_context:
-    policy_id: null                  # Populate only if an Access Context Manager policy exists
+    policy_id: null
   restricted_services:
   - storage.googleapis.com
   - bigquery.googleapis.com
@@ -50,51 +31,38 @@ vpc_sc:
   - composer.googleapis.com
   resources:
     projects:
-    - stream-accelerator-2            # Project(s) protected by the perimeter
+    - stream-accelerator-2
   perimeter_type: REGULAR
   dry_run:
     enabled: true
-    violations_log_only: true         # Logs violations instead of blocking traffic
+    violations_log_only: true
   ingress_rules:
     allowed_identities: []
     allowed_resources: []
   egress_rules:
     allowed_services: []
     allowed_identities: []
-
-# ------------------------------------------------------------------------------
-# DATAFLOW SERVICE ACCOUNT
-# ------------------------------------------------------------------------------
-# This service account is used by Dataflow workers at runtime.
-# NEVER use the default Compute Engine service account in production.
 service_account:
-  name: dataflow-stream-sa            # Service account name (auto-created)
+  name: dataflow-stream-sa
   display_name: Dataflow Streaming Service Account (Dev)
   roles:
-  - roles/dataflow.worker             # Required to run Dataflow jobs
-  - roles/pubsub.subscriber           # Required to read events
-  - roles/pubsub.publisher            # Required to publish DLQ messages
-  - roles/pubsub.viewer               # Required for topic/subscription metadata
-  - roles/bigquery.dataEditor         # Required to write tables
-  - roles/bigquery.jobUser            # Required for BigQuery load jobs
-  - roles/storage.objectAdmin         # Required for GCS temp/staging
-  - roles/artifactregistry.reader     # Required to pull pipeline image
-  - roles/dataflow.worker             # (Duplicate is harmless, but intentional here)
-  - roles/datalineage.producer           # Required for Data Catalog lineage tracking
-  - roles/datacatalog.viewer          # Required for Data Catalog metadata management
-  - roles/datalineage.viewer             # Required for Data Catalog lineage viewing
-
-# ------------------------------------------------------------------------------
-# CLOUD STORAGE (GCS) BUCKETS
-# ------------------------------------------------------------------------------
-# These buckets store configuration, Dataflow artifacts, and archived events.
+  - roles/dataflow.worker
+  - roles/pubsub.subscriber
+  - roles/pubsub.publisher
+  - roles/pubsub.viewer
+  - roles/bigquery.dataEditor
+  - roles/bigquery.jobUser
+  - roles/storage.objectAdmin
+  - roles/artifactregistry.reader
+  - roles/dataflow.worker
+  - roles/datalineage.producer
+  - roles/datacatalog.viewer
+  - roles/datalineage.viewer
 storage:
   buckets:
-  - name: stream-accelerator-2-config # Central bucket for ALL YAML configs
+  - name: stream-accelerator-2-config
     description: Configuration files storage
     files:
-    # These files are uploaded automatically during infra setup
-    # Users customize these locally and re-run infra_setup.py
     - source: config/destination_mapping.yaml
       destination: destination_mapping.yaml
     - source: config/transformation.yaml
@@ -108,29 +76,22 @@ storage:
     - source: config/backfill.yaml
       destination: backfill.yaml
     vpc_sc:
-      protected: true                 # Protected if VPC-SC is enabled
+      protected: true
       allow_public_access: false
-
   - name: stream-accelerator-2-dataflow
     description: Dataflow job artifacts
     folders:
-    - staging                          # Pipeline staging files
-    - temp                             # Temporary Dataflow files
-    - templates                        # Flex Template JSON files
+    - staging
+    - temp
+    - templates
     vpc_sc:
       protected: true
-
   - name: stream-accelerator-2-archive
     description: Archived raw events
     folders:
-    - events                           # Long-term archive of raw events
+    - events
     vpc_sc:
       protected: true
-
-# ------------------------------------------------------------------------------
-# PIPELINE CONFIG FILE MANAGEMENT
-# ------------------------------------------------------------------------------
-# Defines which config files are considered part of the pipeline runtime.
 pipeline_configs:
   config_directory: config
   bucket: stream-accelerator-2-config
@@ -141,203 +102,137 @@ pipeline_configs:
   - composer.yaml
   - pipeline.yaml
   - backfill.yaml
-
-# ------------------------------------------------------------------------------
-# PUB/SUB CONFIGURATION
-# ------------------------------------------------------------------------------
-# Handles event ingestion and DLQ routing.
 pubsub:
   schemas:
-  - name: json_event_v2               # Canonical event schema name
+  - name: json_event_v2
     type: avro
     definition_file: schemas/json_event_v2.avsc
     payload_schema_file: schemas/json_event_v2.json
-    # IMPORTANT:
-    # If payload fields change, BOTH schema files must be updated.
-
   topics:
   - name: json-events-topic
     description: Main events ingestion topic
-    schema: json_event_v2              # Enforces payload structure
+    schema: json_event_v2
     message_encoding: json
     vpc_sc:
       protected: true
-
   - name: json-events-dlq
     description: Dead letter queue topic for streaming failures
     vpc_sc:
       protected: true
-
   - name: json-events-backfill-dlq
     description: Dead letter queue topic for backfill failures
     vpc_sc:
       protected: true
-
   subscriptions:
   - name: json-events-sub
     topic: json-events-topic
-    ack_deadline: 120                  # Time (seconds) to process before retry
+    ack_deadline: 120
     max_delivery_attempts: 5
     dead_letter_topic: json-events-dlq
-
   - name: json-events-dlq-sub
     topic: json-events-dlq
     ack_deadline: 60
-
   - name: json-events-backfill-dlq-sub
     topic: json-events-backfill-dlq
     ack_deadline: 60
-
-# ------------------------------------------------------------------------------
-# BIGQUERY CONFIGURATION
-# ------------------------------------------------------------------------------
-# Destination for processed analytics data.
 bigquery:
   datasets:
-  - name: analytics                   # BigQuery dataset name
+  - name: analytics
     description: Analytics dataset for processed events
     location: us-central1
     vpc_sc:
       protected: true
     tables:
-    - name: service_requests           # Main processed table
-
-# ------------------------------------------------------------------------------
-# DOCKER IMAGE CONFIGURATION
-# ------------------------------------------------------------------------------
-# Defines how the Dataflow Flex Template image is built.
+    - name: service_requests
 docker:
   registry:
     location: us-central1
-    repository: dataflow-accelerators # Artifact Registry repository
+    repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v164                          # Auto-incremented if enabled
+    tag: v170
     dockerfile: docker/Dockerfile
     context: .
-
-# ------------------------------------------------------------------------------
-# DATAFLOW TEMPLATE CONFIGURATION
-# ------------------------------------------------------------------------------
 dataflow:
   template:
     name: json-streaming-templ-new
     metadata_file: docker/metadata.json
     sdk_language: PYTHON
     storage_path: gs://stream-accelerator-2-dataflow/templates/json-streaming-templ-latest.json
-
   job:
-    name_prefix: json-streaming        # Prefix for Dataflow job names
+    name_prefix: json-streaming
     worker_region: us-central1
     worker_zone: us-central1-a
     staging_location: gs://stream-accelerator-2-dataflow/staging
     temp_location: gs://stream-accelerator-2-dataflow/temp
-
     parameters:
       subscription: projects/stream-accelerator-2/subscriptions/json-events-sub
       config_bucket: stream-accelerator-2-config
-      env: dev                         # Environment label (dev / qa / prod)
-      job_mode: streaming              # streaming OR backfill (do not change manually)
-
-    num_workers: 2                     # Initial workers
-    max_workers: 10                    # Autoscaling upper bound
+      env: dev
+      job_mode: streaming
+    num_workers: 2
+    max_workers: 10
     worker_machine_type: n2-standard-2
     disk_size_gb: 30
     autoscaling_algorithm: THROUGHPUT_BASED
     enable_streaming_engine: true
-
     experiments:
     - use_runner_v2
     - enable_vertical_autoscaling=true
-    - enable_lineage=true            # Enable Data Catalog lineage tracking
-
-
-# ------------------------------------------------------------------------------
-# STREAMING PERFORMANCE TUNING
-# ------------------------------------------------------------------------------
+    - enable_lineage=true
 streaming_tuning:
   dedup:
     enabled: true
-    mode: single                       # single = per-key state
+    mode: single
     buffer_seconds: 30
     max_state_age_sec: 1800
-
   sharding:
-    num_shards: 32                     # Parallelism for downstream sinks
-
+    num_shards: 32
   windowing:
     enabled: true
     type: fixed
     window_size_sec: 60
     allowed_lateness_sec: 300
     archive_window_sec: 60
-
   batching:
     bigquery:
-      enabled: false                   # Enable only if batch writes are required
+      enabled: false
       min_batch_size: 200
       max_batch_size: 1000
-
-# ------------------------------------------------------------------------------
-# DEPLOYMENT BEHAVIOR
-# ------------------------------------------------------------------------------
 deployment:
-  auto_increment_version: true         # Auto bump Docker image tag
-  cleanup_old_images: true             # Remove old images automatically
+  auto_increment_version: true
+  cleanup_old_images: true
   max_image_versions: 5
   enable_monitoring: true
   enable_logging: true
-
-# ------------------------------------------------------------------------------
-# ORCHESTRATION (CLOUD COMPOSER)
-# ------------------------------------------------------------------------------
 control_planes:
   composer:
     config_bucket: stream-accelerator-2-config
     config_path: composer.yaml
-
 orchestration:
   dags:
     streaming_start: dataflow_streaming_start
     streaming_stop: dataflow_streaming_stop
     rolling_deploy: dataflow_streaming_rolling_deploy
     recovery: failure_auto_recovery
-
-# ------------------------------------------------------------------------------
-# RAW EVENTS ARCHIVAL
-# ------------------------------------------------------------------------------
 raw_events:
   table: stream-accelerator-2.analytics.raw_events
-  # Stores raw (unprocessed) events for audit and replay
-
-# ------------------------------------------------------------------------------
-# SCHEMA MANAGEMENT & EVOLUTION
-# ------------------------------------------------------------------------------
 schema_management:
   enabled: true
   scope: FULL_EVENT
   schema_name: json_event_v2
   schema_version: v2
   evolution_policy:
-    on_new_field: ALLOW                # New fields allowed
-    on_missing_field: WARN             # Missing fields logged
-    on_type_change: FAIL               # Type changes break pipeline
-  dlq_on_violation: true               # Violations routed to DLQ
-
-# ------------------------------------------------------------------------------
-# OBSERVABILITY & ALERTING
-# ------------------------------------------------------------------------------
+    on_new_field: ALLOW
+    on_missing_field: WARN
+    on_type_change: FAIL
+  dlq_on_violation: true
 observability:
   alerts:
     enabled: true
     email:
       address: sidharthunnikrishnan2002@gmail.com
-      # Replace with team distribution list in production
-
-# ------------------------------------------------------------------------------
-# SECURITY (OPTIONAL CMEK)
-# ------------------------------------------------------------------------------
 security:
   cmek:
-    enabled: false                     # Enable only if CMEK is required
+    enabled: false
     key_name: projects/PROJECT/locations/REGION/keyRings/RING/cryptoKeys/KEY

@@ -1,6 +1,6 @@
 class FieldMapper:
     def __init__(self, mapping):
-        self.mapping = mapping
+        self.mapping = mapping or {}  # Support empty mapping without errors
 
     def _get_nested(self, obj, path):
         """Support dot notation: payload.request_id → obj['payload']['request_id']"""

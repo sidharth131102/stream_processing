@@ -2,7 +2,7 @@ from simpleeval import SimpleEval
 
 class BusinessRules:
     def __init__(self, rules):
-        self.rules = rules
+        self.rules = rules or []
         self.evaluator = SimpleEval()
         self.evaluator.functions = {}   # ❌ no functions
         self.evaluator.names = {}       # populated per-event

@@ -55,6 +55,25 @@
           ]
         }
       },
+      {
+        "title": "Watermark Lag (SLA Indicator)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "legendTemplate": "Watermark Lag",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/data_watermark_age\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
 
       {
         "title": "Deduplication – Rate (events/sec)",
@@ -148,7 +167,7 @@
               "legendTemplate": "Workers",
               "timeSeriesQuery": {
                 "timeSeriesFilter": {
-                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/current_num_workers\"",
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/active_worker_instances\"",
                   "aggregation": {
                     "alignmentPeriod": "60s",
                     "perSeriesAligner": "ALIGN_MEAN"
@@ -160,7 +179,7 @@
               "legendTemplate": "CPU Utilization",
               "timeSeriesQuery": {
                 "timeSeriesFilter": {
-                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/cpu_utilization\"",
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/aggregated_worker_utilization\"",
                   "aggregation": {
                     "alignmentPeriod": "60s",
                     "perSeriesAligner": "ALIGN_MEAN"

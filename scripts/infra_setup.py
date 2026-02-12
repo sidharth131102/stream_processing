@@ -211,13 +211,34 @@ def ensure_dataset(project_id: str, name: str, location: str):
 # --------------------------------------------------
 def create_monitoring_dashboard(dashboard_file: Path):
     if not dashboard_file.exists():
-        print(f"⚠ Dashboard file not found, skipping: {dashboard_file}")
+        print(f"⚠ Dashboard file not found: {dashboard_file}")
         return
 
-    run([
-        "gcloud", "monitoring", "dashboards", "create",
-        "--config-from-file", str(dashboard_file)
-    ], check=False)
+    import json
+    # Load JSON to get the 'displayName' or 'name'
+    dashboard_data = json.loads(dashboard_file.read_text())
+    display_name = dashboard_data.get("displayName", "My Dashboard")
+
+    # Check if dashboard already exists by display name
+    existing = run_capture([
+        "gcloud", "monitoring", "dashboards", "list",
+        f'--filter=displayName="{display_name}"',
+        "--format=value(name)"
+    ])
+
+    if existing:
+        print(f"🔄 Dashboard '{display_name}' exists. Updating...")
+        # Note: Update requires the resource ID (e.g., projects/123/dashboards/abc)
+        run([
+            "gcloud", "monitoring", "dashboards", "update", existing,
+            "--config-from-file", str(dashboard_file)
+        ])
+    else:
+        print(f"✨ Creating new dashboard: {display_name}")
+        run([
+            "gcloud", "monitoring", "dashboards", "create",
+            "--config-from-file", str(dashboard_file)
+        ])
 
 
 def create_alert_policies(alerts_dir: Path):

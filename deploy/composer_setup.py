@@ -41,17 +41,6 @@ def load_yaml(path: Path) -> Dict:
         raise FileNotFoundError(path)
     return yaml.safe_load(path.read_text())
 
-# def load_yaml_from_gcs(bucket: str, path: str) -> Dict:
-#     client = storage.Client()
-#     blob = client.bucket(bucket).blob(path)
-
-#     if not blob.exists():
-#         raise FileNotFoundError(
-#             f"composer.yaml not found at gs://{bucket}/{path}"
-#         )
-
-    return yaml.safe_load(blob.download_as_text())
-
 
 def ensure_service_account(project_id: str, sa_name: str, display_name: str):
     email = f"{sa_name}@{project_id}.iam.gserviceaccount.com"

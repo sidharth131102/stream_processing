@@ -34,7 +34,7 @@ def _resolve_table(cfg):
     )
 
 
-def _collect_destination_fields(dest_cfg, source_cfg, transform_cfg):
+def _collect_destination_fields(dest_cfg, transform_cfg):
     fields = {
         "event_id": "STRING",
         "event_type": "STRING",
@@ -91,7 +91,7 @@ def write_bq(pcoll, cfg):
     table = _resolve_table(cfg)
 
     schema = {
-        "fields": _collect_destination_fields(dest, cfg["source"], transforms)
+        "fields": _collect_destination_fields(dest, transforms)
     }
 
     # ----------------------------

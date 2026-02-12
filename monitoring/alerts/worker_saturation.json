@@ -5,7 +5,7 @@
     {
       "displayName": "CPU utilization > 80%",
       "conditionThreshold": {
-        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/cpu_utilization\"",
+        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/aggregated_worker_utilization\"",
         "comparison": "COMPARISON_GT",
         "thresholdValue": 0.1,
         "duration": "600s",
