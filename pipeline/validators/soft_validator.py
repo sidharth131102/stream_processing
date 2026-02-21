@@ -86,6 +86,7 @@ class SoftValidate(beam.DoFn):
             yield beam.pvalue.TaggedOutput(
                 "dlq",
                 {
+                    "stage": "validation",
                     "event": event,
                     "validation_errors": errors,
                 },

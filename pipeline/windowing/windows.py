@@ -1,3 +1,4 @@
+import logging
 import apache_beam as beam
 from apache_beam.transforms.trigger import (
     AfterWatermark,
@@ -50,6 +51,7 @@ class ApplyWindows(beam.PTransform):
                 else None
             ),
         )
+        logging.info(f"Configured windowing with size: {window_size}s, allowed lateness: {allowed_lateness}s, accumulation mode: {acc}, early trigger: {early_sec}s, late trigger: {late_count} elements")
 
         # ----------------------------
         # Apply windowing

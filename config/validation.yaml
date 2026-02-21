@@ -32,6 +32,7 @@ required_fields:
   - event_source    # System that produced the event
   - event_ts        # Event timestamp (used for ordering/windowing)
 
+
 # ------------------------------------------------------------------------------
 # REQUIRED PAYLOAD FIELDS
 # ------------------------------------------------------------------------------
@@ -51,40 +52,16 @@ required_fields:
 payload_required_fields:
   - request_id      # Business request identifier
   - customer_id     # Customer identifier
-  - priority        # Business priority (e.g., HIGH, MEDIUM, LOW)
+  - priority # Business priority (e.g., HIGH, MEDIUM, LOW)
+    
 
-# ------------------------------------------------------------------------------
-# LENGTH VALIDATION RULES
-# ------------------------------------------------------------------------------
-# These rules limit the size of string fields.
-# Useful to:
-# - Prevent oversized text fields
-# - Protect downstream systems (BigQuery, dashboards)
-#
-# Format:
-#   <field_name>:
-#     max: <maximum_length>
-#
-# Fields must already exist at validation time.
+
 length_checks:
   description:      # Text field to validate
-    max: 500        # Maximum allowed characters
+    max: 100        # Maximum allowed characters
 
-# ------------------------------------------------------------------------------
-# TYPE VALIDATION RULES
-# ------------------------------------------------------------------------------
-# Ensures fields contain values of expected data types.
-#
-# Supported types depend on pipeline implementation
-# (e.g., STRING, INTEGER, FLOAT, BOOLEAN, TIMESTAMP).
-#
-# If type validation fails:
-# - Event is marked INVALID
-# - Routed to DLQ
-#
-# Modify when:
-# - Field types change
-# - New type validations are required
+
+
 type_checks:
   priority: STRING  # Priority must be a string value
 

@@ -1,3 +1,4 @@
+import logging
 import apache_beam as beam
 from datetime import datetime, timezone
 from apache_beam.utils.timestamp import Timestamp
@@ -10,6 +11,7 @@ class AssignEventTime(beam.DoFn):
         if not isinstance(ts, str):
             event["error"] = "event_ts is not a string"
             event["_dlq_reason"] = "event_time_invalid_type"
+            logging.error(f"Event time type error for event_id: {event.get('event_id', 'unknown_id')}")
             yield beam.pvalue.TaggedOutput("dlq", event)
             return  # 🔥 CRITICAL: stops retries
 
@@ -22,6 +24,7 @@ class AssignEventTime(beam.DoFn):
             event["_dlq_reason"] = "event_time_parse_failed"
             yield beam.pvalue.TaggedOutput("dlq", event)
             return  # 🔥 CRITICAL: stops retries
+            
 
         # 3️⃣ Happy path (ACK happens)
         event["event_timestamp"] = dt.timestamp()
@@ -30,3 +33,4 @@ class AssignEventTime(beam.DoFn):
             event,
             Timestamp.from_utc_datetime(dt)
         )
+        logging.info(f"Assigned event time for event_id: {event.get('event_id', 'unknown_id')} with timestamp: {dt.isoformat()}")

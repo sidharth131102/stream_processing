@@ -23,7 +23,7 @@
 # - You use a different dataset
 # - You want a different final table name
 target:
-  project: stream-accelerator-2     # GCP project where BigQuery dataset exists
+  project: stream-accelerator-3     # GCP project where BigQuery dataset exists
   dataset: analytics                # BigQuery dataset name
   table: service_requests           # Final output table for streaming data
 
@@ -87,7 +87,7 @@ schema_mode: FINAL_OUTPUT           # FINAL_OUTPUT = after transformations + val
 # Replace ONLY if:
 # - Project changes
 # - DLQ topic name changes
-dlq_topic: projects/stream-accelerator-2/topics/json-events-dlq
+dlq_topic: projects/stream-accelerator-3/topics/json-events-dlq
 
 # ------------------------------------------------------------------------------
 # NOTE

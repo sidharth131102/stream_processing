@@ -1,5 +1,5 @@
 project:
-  id: stream-accelerator-2
+  id: stream-accelerator-3
   region: us-central1
   location: us-central1
 apis:
@@ -12,14 +12,23 @@ apis:
 - monitoring.googleapis.com
 - artifactregistry.googleapis.com
 - iam.googleapis.com
-- cloudresourcemanager.googleapis.com# Required for project-level resource management
+- cloudresourcemanager.googleapis.com
 - datalineage.googleapis.com
 - datacatalog.googleapis.com
 - dataplex.googleapis.com
+network:
+  enabled: true
+  name: stream-accelerator-vpc
+  subnetwork:
+    self_link: regions/us-central1/subnetworks/stream-accelerator-subnet
+    name: stream-accelerator-subnet
+    region: us-central1
+  dataflow:
+    use_public_ips: false
 vpc_sc:
   enabled: false
   mode: dry_run
-  perimeter_name: stream-accelerator-2-perimeter
+  perimeter_name: null
   access_context:
     policy_id: null
   restricted_services:
@@ -31,7 +40,7 @@ vpc_sc:
   - composer.googleapis.com
   resources:
     projects:
-    - stream-accelerator-2
+    - stream-accelerator-3
   perimeter_type: REGULAR
   dry_run:
     enabled: true
@@ -60,7 +69,7 @@ service_account:
   - roles/datalineage.viewer
 storage:
   buckets:
-  - name: stream-accelerator-2-config
+  - name: stream-accelerator-3-config
     description: Configuration files storage
     files:
     - source: config/destination_mapping.yaml
@@ -78,7 +87,7 @@ storage:
     vpc_sc:
       protected: true
       allow_public_access: false
-  - name: stream-accelerator-2-dataflow
+  - name: stream-accelerator-3-dataflow
     description: Dataflow job artifacts
     folders:
     - staging
@@ -86,7 +95,7 @@ storage:
     - templates
     vpc_sc:
       protected: true
-  - name: stream-accelerator-2-archive
+  - name: stream-accelerator-3-archive
     description: Archived raw events
     folders:
     - events
@@ -94,7 +103,7 @@ storage:
       protected: true
 pipeline_configs:
   config_directory: config
-  bucket: stream-accelerator-2-config
+  bucket: stream-accelerator-3-config
   files:
   - destination_mapping.yaml
   - transformation.yaml
@@ -150,7 +159,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v170
+    tag: v175
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -158,16 +167,20 @@ dataflow:
     name: json-streaming-templ-new
     metadata_file: docker/metadata.json
     sdk_language: PYTHON
-    storage_path: gs://stream-accelerator-2-dataflow/templates/json-streaming-templ-latest.json
+    storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-latest.json
+    safe_storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-safe.json
+    latest_storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-latest.json
+    latest_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v175.json
+    previous_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v174.json
   job:
     name_prefix: json-streaming
     worker_region: us-central1
     worker_zone: us-central1-a
-    staging_location: gs://stream-accelerator-2-dataflow/staging
-    temp_location: gs://stream-accelerator-2-dataflow/temp
+    staging_location: gs://stream-accelerator-3-dataflow/staging
+    temp_location: gs://stream-accelerator-3-dataflow/temp
     parameters:
-      subscription: projects/stream-accelerator-2/subscriptions/json-events-sub
-      config_bucket: stream-accelerator-2-config
+      subscription: projects/stream-accelerator-3/subscriptions/json-events-sub
+      config_bucket: stream-accelerator-3-config
       env: dev
       job_mode: streaming
     num_workers: 2
@@ -192,13 +205,12 @@ streaming_tuning:
     enabled: true
     type: fixed
     window_size_sec: 60
-    allowed_lateness_sec: 300
-    archive_window_sec: 60
+    allowed_lateness_sec: 60
   batching:
     bigquery:
       enabled: false
-      min_batch_size: 200
-      max_batch_size: 1000
+      min_batch_size: 10
+      max_batch_size: 100
 deployment:
   auto_increment_version: true
   cleanup_old_images: true
@@ -207,7 +219,7 @@ deployment:
   enable_logging: true
 control_planes:
   composer:
-    config_bucket: stream-accelerator-2-config
+    config_bucket: stream-accelerator-3-config
     config_path: composer.yaml
 orchestration:
   dags:
@@ -215,8 +227,10 @@ orchestration:
     streaming_stop: dataflow_streaming_stop
     rolling_deploy: dataflow_streaming_rolling_deploy
     recovery: failure_auto_recovery
+auto_recovery:
+  use_safe_template: true
 raw_events:
-  table: stream-accelerator-2.analytics.raw_events
+  table: stream-accelerator-3.analytics.raw_events
 schema_management:
   enabled: true
   scope: FULL_EVENT
@@ -232,7 +246,10 @@ observability:
     enabled: true
     email:
       address: sidharthunnikrishnan2002@gmail.com
+    notification_channels:
+      email:
+        id: projects/stream-accelerator-3/notificationChannels/14149619566453462151
 security:
   cmek:
-    enabled: false
-    key_name: projects/PROJECT/locations/REGION/keyRings/RING/cryptoKeys/KEY
+    enabled: true
+    key_name: projects/stream-accelerator-3/locations/us-central1/keyRings/stream-accelerator-keyring/cryptoKeys/dataflow-key

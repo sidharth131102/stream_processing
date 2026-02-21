@@ -49,6 +49,7 @@ class TransformationEngine(beam.DoFn):
                 # 🔒 EXISTING LOGIC (UNCHANGED)
                 logging.error(f"❌ Invalid JSON: {str(original_event)[:100]}")
                 yield beam.pvalue.TaggedOutput("dlq", {
+                    "stage": "transform",
                     "error": "Invalid JSON string in transformation",
                     "raw": str(original_event)[:500]
                 })
@@ -70,6 +71,7 @@ class TransformationEngine(beam.DoFn):
             # 🔒 EXISTING LOGIC (UNCHANGED)
             logging.error(f"❌ Not dict: type={type(event)}")
             yield beam.pvalue.TaggedOutput("dlq", {
+                "stage": "transform",
                 "error": f"Expected dict, got {type(event)}",
                 "raw": str(original_event)[:500]
             })
@@ -100,6 +102,7 @@ class TransformationEngine(beam.DoFn):
             # 🔒 EXISTING LOGIC (UNCHANGED)
             logging.error(f"❌ Transform failed: {str(e)}")
             yield beam.pvalue.TaggedOutput("dlq", {
+                "stage": "transform",
                 "error": f"Transformation failed: {str(e)}",
                 "raw": str(event)[:500]
             })

@@ -34,13 +34,16 @@ class PreProcess(beam.DoFn):
 
             elif isinstance(element, bytes):
                 element_str = element.decode("utf-8")
+                logging.info(f"preprocessing byte elements: {element_str[:100]}")
 
             elif isinstance(element, str):
                 element_str = element
+                logging.info(f"preprocessing string element: {element_str[:100]}")
 
             elif isinstance(element, dict):
                 event = element
                 element_str = None
+                logging.info(f"preprocessing dict element with keys: {list(event.keys())}")
 
             else:
                 raise ValueError(f"Unsupported input type: {type(element)}")
@@ -48,14 +51,17 @@ class PreProcess(beam.DoFn):
             if element_str is not None:
                 try:
                     event = json.loads(element_str)
+                    logging.info(f"preprocessed JSON event with keys: {list(event.keys())}")
                 except json.JSONDecodeError:
                     event = json.loads(
                         base64.b64decode(element_str).decode("utf-8")
                     )
+                    logging.info(f"preprocessed base64-encoded JSON event with keys: {list(event.keys())}")
 
             if "payload" in event:
                 if isinstance(event["payload"], dict):
                     event["payload"] = json.dumps(event["payload"])
+                    logging.info("Serialized payload dict to JSON string")
                 elif isinstance(event["payload"], str):
                     pass
 
@@ -71,6 +77,7 @@ class PreProcess(beam.DoFn):
                     )
 
             yield event
+            logging.info(f"Successfully preprocessed event: {event.get('event_id', 'unknown_id')}")
 
         except Exception as e:
             # ✅ ADD: METRICS
@@ -88,6 +95,7 @@ class PreProcess(beam.DoFn):
             yield beam.pvalue.TaggedOutput(
                 "dlq",
                 {
+                    "stage": "preprocess",
                     "error": f"PreProcess failed: {str(e)}",
                     "raw": str(element)[:500],
                 },

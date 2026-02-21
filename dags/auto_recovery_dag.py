@@ -35,11 +35,26 @@ def load_pipeline_config(**context):
         hook.download(bucket, path, f.name)
         cfg = yaml.safe_load(f)
 
+    template_cfg = cfg["dataflow"]["template"]
+    recovery_cfg = cfg.get("auto_recovery", {})
+    latest_template_path = template_cfg["storage_path"]
+    safe_template_path = template_cfg.get("safe_storage_path")
+    use_safe_template = bool(recovery_cfg.get("use_safe_template", True))
+    recovery_template_path = (
+        safe_template_path
+        if use_safe_template and safe_template_path
+        else latest_template_path
+    )
+
     return {
         "project_id": cfg["project"]["id"],
         "region": cfg["project"]["region"],
         "job_prefix": cfg["dataflow"]["job"]["name_prefix"],
         "streaming_start_dag": cfg["orchestration"]["dags"]["streaming_start"],
+        "use_safe_template": use_safe_template,
+        "safe_template_path": safe_template_path,
+        "latest_template_path": latest_template_path,
+        "recovery_template_path": recovery_template_path,
     }
 
 
@@ -138,6 +153,11 @@ with DAG(
     trigger_restart = TriggerDagRunOperator(
         task_id="trigger_streaming_restart",
         trigger_dag_id="{{ ti.xcom_pull(task_ids='load_pipeline_config')['streaming_start_dag'] }}",
+        conf={
+            "template_path": "{{ ti.xcom_pull(task_ids='load_pipeline_config')['recovery_template_path'] }}",
+            "template_mode": "{{ 'safe' if ti.xcom_pull(task_ids='load_pipeline_config')['use_safe_template'] else 'latest' }}",
+            "triggered_by": "failure_auto_recovery",
+        },
         reset_dag_run=True,
         wait_for_completion=False,
     )

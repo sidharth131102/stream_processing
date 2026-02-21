@@ -61,5 +61,6 @@ class BatchDeduplicateLatest(beam.PTransform):
             pcoll
             | "KeyByEventId" >> beam.Map(lambda e: (e["event_id"], e))
             | "GroupByEventId" >> beam.GroupByKey()
-            | "PickLatestByEventTs" >> beam.Map(_pick_latest_and_track).with_outputs("dropped", main="main")
+            # _pick_latest_and_track yields main + tagged side output elements.
+            | "PickLatestByEventTs" >> beam.FlatMap(_pick_latest_and_track).with_outputs("dropped", main="main")
         )

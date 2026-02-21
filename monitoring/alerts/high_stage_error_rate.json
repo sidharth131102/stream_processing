@@ -3,12 +3,12 @@
   "combiner": "OR",
   "conditions": [
     {
-      "displayName": "Stage errors > 10 per minute",
+      "displayName": "Stage errors > threshold",
       "conditionThreshold": {
-        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=starts_with(\"stage_errors\")",
+        "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND (metric.labels.metric_name=\"validation\" OR metric.labels.metric_name=\"parse\" OR metric.labels.metric_name=\"preprocess\" OR metric.labels.metric_name=\"transform\" OR metric.labels.metric_name=\"schema\" OR metric.labels.metric_name=\"unknown\")",
         "comparison": "COMPARISON_GT",
-        "thresholdValue": 10,
-        "duration": "300s",
+        "thresholdValue": 2,
+        "duration": "60s",
         "aggregations": [
           {
             "alignmentPeriod": "60s",

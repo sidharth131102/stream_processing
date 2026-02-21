@@ -39,11 +39,15 @@ def load_pipeline_yaml(**context):
     project_cfg = cfg["project"]
     dataflow_cfg = cfg["dataflow"]
     job_cfg = dataflow_cfg["job"]
+    template_cfg = dataflow_cfg["template"]
+    network_cfg = cfg.get("network", {})
+    subnet_cfg = network_cfg.get("subnetwork", {})
 
     return {
         "project_id": project_cfg["id"],
         "region": project_cfg["region"],
-        "template_path": dataflow_cfg["template"]["storage_path"],
+        "template_path": template_cfg["storage_path"],
+        "safe_template_path": template_cfg.get("safe_storage_path"),
         "job_name_prefix": job_cfg["name_prefix"],
         "service_account": (
             f"{cfg['service_account']['name']}"
@@ -67,6 +71,17 @@ def load_pipeline_yaml(**context):
         # CRITICAL: Explicit staging for Flex Template
         "staging_location": job_cfg["staging_location"],
         "temp_location": job_cfg["temp_location"],
+        "security": cfg.get("security", {}),
+        "network": {
+            "enabled": bool(network_cfg.get("enabled", False)),
+            "network": network_cfg.get("name"),
+            "subnetwork": subnet_cfg.get("self_link"),
+            "subnetwork_name": subnet_cfg.get("name"),
+            "subnetwork_region": subnet_cfg.get("region", project_cfg["region"]),
+            "use_public_ips": bool(
+                network_cfg.get("dataflow", {}).get("use_public_ips", False)
+            ),
+        },
     }
 
 
@@ -109,6 +124,20 @@ def build_flex_template_body(context, **_):
     """
     ti = context["ti"]
     cfg = ti.xcom_pull(task_ids="load_pipeline_yaml")
+    dag_conf = (context.get("dag_run").conf or {})
+
+    if dag_conf.get("template_path"):
+        template_path = dag_conf["template_path"]
+    elif dag_conf.get("template_mode") == "safe" and cfg.get("safe_template_path"):
+        template_path = cfg["safe_template_path"]
+    else:
+        template_path = cfg["template_path"]
+
+    logging.info(
+        "Launching streaming job with template_path=%s (mode=%s)",
+        template_path,
+        dag_conf.get("template_mode", "latest"),
+    )
 
     # -------------------------------
     # Base environment (existing)
@@ -137,6 +166,37 @@ def build_flex_template_body(context, **_):
             security_cfg["key_name"],
         )
 
+    network_cfg = cfg.get("network", {})
+    if network_cfg.get("enabled"):
+        if network_cfg.get("network"):
+            environment["network"] = network_cfg["network"]
+
+        if network_cfg.get("subnetwork"):
+            environment["subnetwork"] = network_cfg["subnetwork"]
+        elif network_cfg.get("subnetwork_name"):
+            environment["subnetwork"] = (
+                f"regions/{network_cfg['subnetwork_region']}/subnetworks/"
+                f"{network_cfg['subnetwork_name']}"
+            )
+
+        environment["ipConfiguration"] = (
+            "WORKER_IP_PUBLIC"
+            if network_cfg.get("use_public_ips")
+            else "WORKER_IP_PRIVATE"
+        )
+
+    # Runtime overrides when triggering the DAG manually.
+    if dag_conf.get("network"):
+        environment["network"] = dag_conf["network"]
+    if dag_conf.get("subnetwork"):
+        environment["subnetwork"] = dag_conf["subnetwork"]
+    if dag_conf.get("use_public_ips") is not None:
+        environment["ipConfiguration"] = (
+            "WORKER_IP_PUBLIC"
+            if bool(dag_conf["use_public_ips"])
+            else "WORKER_IP_PRIVATE"
+        )
+
     # -------------------------------
     # Final request body
     # -------------------------------
@@ -146,7 +206,7 @@ def build_flex_template_body(context, **_):
                 f"{cfg['job_name_prefix']}-"
                 f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
             ),
-            "containerSpecGcsPath": cfg["template_path"],
+            "containerSpecGcsPath": template_path,
             "parameters": cfg["parameters"],
             "environment": environment,
         }

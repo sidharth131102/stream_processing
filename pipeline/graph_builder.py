@@ -41,6 +41,9 @@ def build_pipeline(p, cfg, subscription):
 
     main = preprocess.main
     preprocess_dlq = preprocess.dlq
+    # Initialize optional DLQs so FlattenDLQ is valid in every job mode.
+    # late_dlq = p | "InitLateDLQEmpty" >> beam.Create([])
+    # dedup_dlq = p | "InitDedupDLQEmpty" >> beam.Create([])
 
     if cfg["job_mode"] == "streaming":
         _= (

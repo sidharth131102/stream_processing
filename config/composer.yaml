@@ -20,8 +20,8 @@
 # Identifies the GCP project where the Composer environment will live.
 # These values MUST match the project used in pipeline.yaml.
 project:
-  id: stream-accelerator-2          # GCP Project ID (REPLACE per environment)
-  number: 529975900001              # GCP Project Number (DO NOT GUESS – fetch from GCP)
+  id: stream-accelerator-3          # GCP Project ID (REPLACE per environment)
+  number: 1091663053251          # GCP Project Number (DO NOT GUESS – fetch from GCP)
 
 # ------------------------------------------------------------------------------
 # COMPOSER ENVIRONMENT DEFINITION
@@ -45,7 +45,7 @@ composer:
     # Optional labels (highly recommended for platform teams)
     # Used for cost tracking, ownership, and governance.
     labels:
-      platform: stream-accelerator-2
+      platform: stream-accelerator-3
       env: dev
       owner: data-platform
 
@@ -76,7 +76,7 @@ composer:
       - roles/bigquery.jobUser      # Required to run BigQuery jobs
       - roles/bigquery.dataViewer   # Required to read BigQuery tables
       - roles/bigquery.dataEditor   # Required to write BigQuery tables
-      - roles/iam.serviceAccountUser# Required to impersonate Dataflow SAs
+      - roles/iam.serviceAccountUser # Required to impersonate Dataflow SAs
 
   # ----------------------------------------------------------------------------
   # COMPOSER SERVICE AGENT (REQUIRED FOR COMPOSER v3)
@@ -84,7 +84,7 @@ composer:
   # This is a Google-managed service agent.
   # DO NOT MODIFY unless the project number changes.
   service_agent:
-    email: service-529975900001@cloudcomposer-accounts.iam.gserviceaccount.com
+    email: service-1091663053251@cloudcomposer-accounts.iam.gserviceaccount.com
     roles:
       - roles/composer.ServiceAgentV2Ext
 
@@ -96,7 +96,7 @@ composer:
       # These Airflow variables are read by ALL DAGs.
       # They allow DAGs to dynamically load pipeline configuration
       # without hardcoding any paths.
-      config_bucket: stream-accelerator-2-config   # GCS bucket holding config YAMLs
+      config_bucket: stream-accelerator-3-config   # GCS bucket holding config YAMLs
       pipeline_yaml_path: pipeline.yaml             # Entry-point pipeline config file
       bq_location: us-central1                      # BigQuery dataset location
 

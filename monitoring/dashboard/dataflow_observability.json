@@ -127,7 +127,7 @@
               "legendTemplate": "{{metric.labels.metric_name}}",
               "timeSeriesQuery": {
                 "timeSeriesFilter": {
-                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND metric.labels.metric_name=starts_with(\"stage_errors\")",
+                  "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/user_counter\" AND (metric.labels.metric_name=\"validation\" OR metric.labels.metric_name=\"parse\" OR metric.labels.metric_name=\"preprocess\" OR metric.labels.metric_name=\"transform\" OR metric.labels.metric_name=\"schema\" OR metric.labels.metric_name=\"unknown\")",
                   "aggregation": {
                     "alignmentPeriod": "60s",
                     "perSeriesAligner": "ALIGN_SUM"

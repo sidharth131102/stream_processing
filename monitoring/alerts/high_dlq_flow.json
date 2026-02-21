@@ -1,5 +1,5 @@
 {
-  "displayName": "Dataflow – High DLQ Flow",
+  "displayName": "Dataflow High DLQ Flow",
   "combiner": "OR",
   "conditions": [
     {

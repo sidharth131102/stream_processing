@@ -42,7 +42,6 @@ class WriteDLQ(beam.PTransform):
         # ✅ EXISTING METRICS (UNCHANGED)
         PipelineMetrics.dlq_events.inc()
         stage = event.get("stage", "unknown")
-        PipelineMetrics.stage_error(stage).inc()
 
         # ✅ ADD: STRUCTURED LOGGING FOR DLQ EVENTS
         logging.error(json.dumps({

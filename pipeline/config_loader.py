@@ -1,3 +1,4 @@
+import logging
 import yaml
 import json
 from google.cloud import storage
@@ -115,5 +116,6 @@ def load_all_configs(bucket: str):
         .get("parameters", {})
         .get("env", "dev")
     )
-
+    logging.info(f"Successfully loaded all configs from gs://{bucket}")
     return cfg
+

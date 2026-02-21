@@ -3,11 +3,11 @@
   "combiner": "OR",
   "conditions": [
     {
-      "displayName": "CPU utilization > 80%",
+      "displayName": "CPU utilization > threshold",
       "conditionThreshold": {
         "filter": "resource.type=\"dataflow_job\" AND metric.type=\"dataflow.googleapis.com/job/aggregated_worker_utilization\"",
         "comparison": "COMPARISON_GT",
-        "thresholdValue": 0.1,
+        "thresholdValue": 0.01,
         "duration": "600s",
         "aggregations": [
           {

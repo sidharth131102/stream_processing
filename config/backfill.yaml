@@ -5,7 +5,7 @@
 mode: backfill
 
 project:
-  id: stream-accelerator-2
+  id: stream-accelerator-3
   region: us-central1
 
 # -------------------------------
@@ -13,7 +13,7 @@ project:
 # -------------------------------
 source:
   type: bigquery
-  raw_table: stream-accelerator-2.analytics.raw_events
+  raw_table: stream-accelerator-3.analytics.raw_events
   event_time_field: event_ts
 
 
@@ -42,7 +42,7 @@ deduplication:
 # (Reuse same configs as streaming)
 # -------------------------------
 transformations:
-  config_bucket: stream-accelerator-2-config
+  config_bucket: stream-accelerator-3-config
   files:
     - transformation.yaml
     - validation.yaml
@@ -89,8 +89,8 @@ dataflow:
     worker_machine_type: e2-standard-4
     disk_size_gb: 100
 
-    staging_location: gs://stream-accelerator-2-dataflow/staging
-    temp_location: gs://stream-accelerator-2-dataflow/temp
+    staging_location: gs://stream-accelerator-3-dataflow/staging
+    temp_location: gs://stream-accelerator-3-dataflow/temp
 
     experiments:
       - use_runner_v2
@@ -117,4 +117,4 @@ monitoring:
 # -------------------------------
 dlq:
   enabled: true
-  topic: projects/stream-accelerator-2/topics/json-events-backfill-dlq
+  topic: projects/stream-accelerator-3/topics/json-events-backfill-dlq
