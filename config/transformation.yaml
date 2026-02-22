@@ -51,6 +51,49 @@ field_mapping:
   location: payload.location            # Physical or logical location
   description: payload.description      # Free-text description
   source_system: payload.source_system  # Originating system name
+  age: payload.age                      # Age of the request in days
+  temperature_c: payload.temperature_c  # Temperature in Celsius (example of numeric field)
+# ------------------------------------------------------------------------------
+# NULL DEFAULTS
+# ------------------------------------------------------------------------------
+# Purpose:
+# Replace null/empty field values with defaults.
+#
+# Supports either:
+# 1) list style:
+# null_defaults:
+#   - field: priority
+#     default: UNKNOWN
+#   - field: age
+#     default: 0
+#
+# 2) map style:
+# null_defaults:
+#   priority: UNKNOWN
+#   age: 0
+# ------------------------------------------------------------------------------
+null_defaults:
+  - field: age
+    default: 0
+
+# ------------------------------------------------------------------------------
+# CONCATENATIONS
+# ------------------------------------------------------------------------------
+# Purpose:
+# Build derived fields by concatenating one or more input fields.
+#
+# Example:
+# concatenations:
+#   - output_field: request_customer_key
+#     inputs: [request_id, customer_id]
+#     separator: "-"
+#     skip_nulls: true
+#     default_value: UNKNOWN
+#     defaults:
+#       customer_id: NA
+#     type: STRING
+# ------------------------------------------------------------------------------
+concatenations: []
 
 # ------------------------------------------------------------------------------
 # BUSINESS RULES
@@ -116,6 +159,97 @@ enrichment:
 
     output_field: region
     # New field created based on lookup result
+  - type: range_lookup
+    input_field: "temperature_c"
+    output_field: "temperature_category"
+    output_type: STRING
+    default: "unknown"
+    ranges:
+      - min: -50
+        max: 0
+        value: "freezing"
+      - min: 1
+        max: 15
+        value: "cold"
+      - min: 16
+        max: 25
+        value: "mild"
+      - min: 26
+        max: 35
+        value: "warm"
+      - min: 36
+        max: 50
+        value: "hot"
+  # - type: range_lookup
+  #   input_field: "event_age_days"
+  #   output_field: "age_bucket"
+  #   output_type: STRING
+  #   default: UNKNOWN
+  #   ranges:
+  #     - min: 0
+  #       max: 7
+  #       value: NEW
+  #     - min: 8
+  #       max: 30
+  #       value: ACTIVE
+  #     - min: 31
+  #       value: STALE
+
+  # - type: multi_key_lookup
+  #   input_fields: ["location", "priority"]
+  #   separator: "|"
+  #   normalize_case: true
+  #   output_field: "routing_queue"
+  #   output_type: STRING
+  #   default: "general_queue"
+  #   lookup:
+  #     "mumbai|high": "west_critical"
+  #     "delhi|high": "north_critical"
+
+  # - type: regex_lookup
+  #   input_field: "description"
+  #   output_field: "issue_category"
+  #   output_type: STRING
+  #   default: "unknown_issue"
+  #   first_match: true
+  #   patterns:
+  #     - pattern: "(cable|wire)"
+  #       value: "cable_issue"
+  #       ignore_case: true
+  #     - pattern: "(transformer)"
+  #       value: "transformer_issue"
+  #       ignore_case: true
+
+  # - type: conditional_set
+  #   output_field: "dispatch_tier"
+  #   output_type: STRING
+  #   default: "TIER_3"
+  #   conditions:
+  #     - when: "event.get('priority') == 'HIGH' and event.get('region') == 'WEST'"
+  #       value: "TIER_1"
+  #     - when: "event.get('priority') == 'HIGH'"
+  #       value: "TIER_2"
+
+  # - type: derived_fields
+  #   fields:
+  #     - output_field: "description_len"
+  #       expression: "len(event.get('description') or '')"
+  #       type: INT64
+  #       default: 0
+  #     - output_field: "priority_rank"
+  #       expression: "3 if event.get('priority') == 'HIGH' else (2 if event.get('priority') == 'MEDIUM' else 1)"
+  #       type: INT64
+  #       default: 1
+
+  # - type: normalization_enrichment
+  #   input_field: "location"
+  #   output_field: "location_normalized"
+  #   output_type: STRING
+  #   default: "unknown"
+  #   operations: ["trim", "lower", "collapse_spaces"]
+  #   synonyms:
+  #     "bombay": "mumbai"
+  #     "n delhi": "delhi"
 
 # ------------------------------------------------------------------------------
 # ENTITY EXTRACTION

@@ -17,14 +17,14 @@ apis:
 - datacatalog.googleapis.com
 - dataplex.googleapis.com
 network:
-  enabled: true
+  enabled: false
   name: stream-accelerator-vpc
   subnetwork:
     self_link: regions/us-central1/subnetworks/stream-accelerator-subnet
     name: stream-accelerator-subnet
     region: us-central1
   dataflow:
-    use_public_ips: false
+    use_public_ips: true
 vpc_sc:
   enabled: false
   mode: dry_run
@@ -159,7 +159,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v175
+    tag: v178
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -170,8 +170,8 @@ dataflow:
     storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-latest.json
     safe_storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-safe.json
     latest_storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-latest.json
-    latest_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v175.json
-    previous_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v174.json
+    latest_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v178.json
+    previous_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v177.json
   job:
     name_prefix: json-streaming
     worker_region: us-central1
@@ -244,11 +244,29 @@ schema_management:
 observability:
   alerts:
     enabled: true
+    watermark_lag:
+      enabled: true
+      threshold: 25
+      duration_sec: 60
+      alignment_sec: 60
+    worker_saturation:
+      enabled: true
+      threshold: 0.01
+      duration_sec: 600
+      alignment_sec: 60
+    stage_error_rate:
+      enabled: true
+      threshold: 2
+      duration_sec: 60
+      alignment_sec: 60
+    high_dlq_flow:
+      enabled: true
+      threshold: 5
+      duration_sec: 300
+      alignment_sec: 60
+  notification_channels:
     email:
-      address: sidharthunnikrishnan2002@gmail.com
-    notification_channels:
-      email:
-        id: projects/stream-accelerator-3/notificationChannels/14149619566453462151
+      id: projects/stream-accelerator-3/notificationChannels/14149619566453462151
 security:
   cmek:
     enabled: true

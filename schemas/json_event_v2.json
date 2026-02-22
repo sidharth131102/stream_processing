@@ -10,5 +10,7 @@
   "payload.priority": "string",
   "payload.location": "string",
   "payload.description": "string",
-  "payload.source_system": "string"
+  "payload.source_system": "string",
+  "payload.age": "integer|null",
+  "payload.temperature_c": "float|null"
 }

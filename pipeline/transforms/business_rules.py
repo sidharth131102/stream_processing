@@ -10,7 +10,8 @@ class BusinessRules:
     def apply(self, event):
         for rule in self.rules:
             try:
-                self.evaluator.names = event
+                # Support both "priority == 'HIGH'" and "event.get('priority') == 'HIGH'".
+                self.evaluator.names = {"event": event, **event}
                 result = self.evaluator.eval(rule["condition"])
                 event[rule["output_field"]] = (
                     rule.get("value", True) if result else False

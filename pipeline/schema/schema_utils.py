@@ -5,7 +5,8 @@ Utilities for runtime schema extraction and schema evolution detection.
 This module is independent of Beam and can be unit-tested easily.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Set
+from datetime import date, datetime, time
 
 
 # -------------------------------------------------------------------
@@ -17,6 +18,52 @@ ENVELOPE_FIELDS = [
     "event_source",
     "event_ts",
 ]
+
+
+def _infer_temporal_string_type(value: str) -> str:
+    v = value.strip()
+    if not v:
+        return "string"
+
+    # RFC3339 timestamp (e.g. 2026-01-14T06:36:15Z / +05:30)
+    if "T" in v:
+        ts_candidate = v
+        if v.endswith("Z"):
+            ts_candidate = f"{v[:-1]}+00:00"
+        try:
+            ts = datetime.fromisoformat(ts_candidate)
+            if ts.tzinfo is not None:
+                return "timestamp"
+            return "datetime"
+        except Exception:
+            pass
+
+    # DATE: YYYY-MM-DD
+    try:
+        date.fromisoformat(v)
+        return "date"
+    except Exception:
+        pass
+
+    # TIME: HH:MM[:SS[.ffffff]]
+    try:
+        time.fromisoformat(v)
+        return "time"
+    except Exception:
+        pass
+
+    return "string"
+
+
+def _parse_expected_types(expected: str) -> Set[str]:
+    raw = str(expected or "").strip().lower()
+    if not raw:
+        return {"unknown"}
+
+    parts = {p.strip() for p in raw.split("|") if p.strip()}
+    if not parts:
+        return {"unknown"}
+    return parts
 
 
 # -------------------------------------------------------------------
@@ -37,7 +84,7 @@ def normalize_type(value: Any) -> str:
     if isinstance(value, float):
         return "float"
     if isinstance(value, str):
-        return "string"
+        return _infer_temporal_string_type(value)
     if isinstance(value, dict):
         return "object"
     if isinstance(value, list):
@@ -101,6 +148,19 @@ def extract_runtime_schema(event: Dict[str, Any]) -> Dict[str, str]:
 # -------------------------------------------------------------------
 # Schema diff logic
 # -------------------------------------------------------------------
+def _types_are_compatible(expected: str, observed: str) -> bool:
+    expected_types = _parse_expected_types(expected)
+
+    if observed in expected_types:
+        return True
+
+    # Backward-friendly: temporal strings are still valid string payloads.
+    if "string" in expected_types and observed in {"date", "time", "datetime", "timestamp"}:
+        return True
+
+    return False
+
+
 def diff_schema(expected: Dict[str, str], observed: Dict[str, str]) -> Dict[str, Any]:
     """
     Compare expected vs observed schema and return structured diff.
@@ -113,7 +173,7 @@ def diff_schema(expected: Dict[str, str], observed: Dict[str, str]) -> Dict[str,
 
     type_changes = {}
     for field in expected_fields & observed_fields:
-        if expected[field] != observed[field]:
+        if not _types_are_compatible(expected[field], observed[field]):
             type_changes[field] = {
                 "expected": expected[field],
                 "observed": observed[field],

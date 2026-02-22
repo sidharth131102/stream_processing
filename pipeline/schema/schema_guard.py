@@ -44,30 +44,61 @@ class SchemaGuard(beam.DoFn):
             yield event
             return
 
-        # 🚨 Schema evolution detected
+        # Schema evolution detected
         self.evolution_detected.inc()
 
-        # ✅ ADD: STAGE ERROR METRIC (NON-BLOCKING)
+        # Stage error metric
         PipelineMetrics.stage_error("schema").inc()
 
-        # ✅ ADD: STRUCTURED LOGGING
+        policy = self.cfg.get("evolution_policy", {})
+        on_new = str(policy.get("on_new_field", "ALLOW")).upper()
+        on_missing = str(policy.get("on_missing_field", "WARN")).upper()
+        on_type = str(policy.get("on_type_change", "WARN")).upper()
+
+        fail_reasons = []
+        if diff.get("new_fields") and on_new == "FAIL":
+            fail_reasons.append("new_fields")
+        if diff.get("missing_fields") and on_missing == "FAIL":
+            fail_reasons.append("missing_fields")
+        if diff.get("type_changes") and on_type == "FAIL":
+            fail_reasons.append("type_changes")
+
+        should_fail = bool(fail_reasons)
+
+        # Structured logging
         logging.warning(json.dumps({
             "severity": "WARNING",
             "stage": "schema",
             "type": "SCHEMA_EVOLUTION",
             "event_id": event.get("event_id"),
             "schema_version": self.cfg.get("schema_version"),
+            "fail_reasons": fail_reasons,
+            "diff": diff,
         }))
 
-        # Always allow event to continue
-        yield event
+        # Route to schema DLQ on policy violation and stop main output.
+        if should_fail:
+            if self.cfg.get("dlq_on_violation", True):
+                yield beam.pvalue.TaggedOutput(
+                    "schema_dlq",
+                    {
+                        "event_id": event.get("event_id"),
+                        "schema_version": self.cfg.get("schema_version"),
+                        "error": f"Schema policy violation: {','.join(fail_reasons)}",
+                        "diff": diff,
+                        "observed_schema": observed_schema,
+                    }
+                )
+            return
 
-        # Emit schema evolution record
+        # Non-failing evolution is allowed to continue; still emit trace event.
+        yield event
         yield beam.pvalue.TaggedOutput(
             "schema_dlq",
             {
                 "event_id": event.get("event_id"),
                 "schema_version": self.cfg.get("schema_version"),
+                "error": None,
                 "diff": diff,
                 "observed_schema": observed_schema,
             }

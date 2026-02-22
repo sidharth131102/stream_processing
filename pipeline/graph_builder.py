@@ -72,19 +72,19 @@ def build_pipeline(p, cfg, subscription):
     )
 
     event_time_dlq = assigned.dlq
-    # if cfg["job_mode"] == "streaming":
-    #     late_filtered = (
-    #         main
-    #         | "DropLateEvents"
-    #         >> beam.ParDo(
-    #             LateDataFilter(
-    #                 allowed_lateness_sec=streaming["windowing"]["allowed_lateness_sec"]
-    #             )
-    #         ).with_outputs("dlq", main="main")
-    #     )
+    if cfg["job_mode"] == "streaming":
+        late_filtered = (
+            main
+            | "DropLateEvents"
+            >> beam.ParDo(
+                LateDataFilter(
+                    allowed_lateness_sec=streaming["windowing"]["allowed_lateness_sec"]
+                )
+            ).with_outputs("dlq", main="main")
+        )
 
-    #     main = late_filtered.main
-    #     late_dlq = late_filtered.dlq
+        main = late_filtered.main
+        late_dlq = late_filtered.dlq
 
     schema_checked = (
         main
@@ -203,31 +203,50 @@ def build_pipeline(p, cfg, subscription):
     # ==================================================
     # 9️⃣ DLQ
     # ==================================================
-    (
+    if cfg.get("job_mode") == "backfill":
         (
-            preprocess_dlq
-            | "TagPreprocessDLQ"
-            >> beam.Map(lambda e: {"stage": "preprocess", **e}),
-            event_time_dlq
-            | "TagEventTimeDLQ"
-            >> beam.Map(lambda e: {"stage": "event_time", **e}),
-            # late_dlq
-            # | "TagLateDLQ"
-            # >> beam.Map(lambda e: {"stage": "late_data", **e}),
-            transform_dlq
-            | "TagTransformDLQ"
-            >> beam.Map(lambda e: {"stage": "transform", **e}),
-            validation_dlq
-            | "TagValidationDLQ"
-            >> beam.Map(lambda e: {"stage": "validation", **e}),
-            schema_dlq
-            | "TagSchemaDLQ"
-            >> beam.Map(lambda e: {"stage": "schema", **e}),
-            dedup_dlq
-            | "TagDedupDLQ"
-            >> beam.Map(lambda e: {"stage": "dedup", **e})
+            (
+                preprocess_dlq
+                | "TagPreprocessDLQ"
+                >> beam.Map(lambda e: {"stage": "preprocess", **e}),
+                event_time_dlq
+                | "TagEventTimeDLQ"
+                >> beam.Map(lambda e: {"stage": "event_time", **e}),
+                transform_dlq
+                | "TagTransformDLQ"
+                >> beam.Map(lambda e: {"stage": "transform", **e}),
+                validation_dlq
+                | "TagValidationDLQ"
+                >> beam.Map(lambda e: {"stage": "validation", **e}),
+                schema_dlq
+                | "TagSchemaDLQ"
+                >> beam.Map(lambda e: {"stage": "schema", **e}),
+                dedup_dlq
+                | "TagDedupDLQ"
+                >> beam.Map(lambda e: {"stage": "dedup", **e})
 
+            )
+            | "FlattenDLQ" >> beam.Flatten()
+            | "WriteDLQ" >> WriteDLQ(dlq_topic)
         )
-        | "FlattenDLQ" >> beam.Flatten()
-        | "WriteDLQ" >> WriteDLQ(dlq_topic)
-    )
+    elif cfg.get("job_mode") == "streaming":
+        (
+            (
+                preprocess_dlq
+                | "TagPreprocessDLQ" >> beam.Map(lambda e: {"stage": "preprocess", **e}),
+                event_time_dlq
+                | "TagEventTimeDLQ" >> beam.Map(lambda e: {"stage": "event_time", **e}),
+                late_dlq
+                | "TagLateDLQ" >> beam.Map(lambda e: {"stage": "late_data", **e}),
+                transform_dlq
+                | "TagTransformDLQ" >> beam.Map(lambda e: {"stage": "transform", **e}),
+                validation_dlq
+                | "TagValidationDLQ" >> beam.Map(lambda e: {"stage": "validation", **e}),
+                schema_dlq
+                | "TagSchemaDLQ" >> beam.Map(lambda e: {"stage": "schema", **e}),
+                dedup_dlq
+                | "TagDedupDLQ" >> beam.Map(lambda e: {"stage": "dedup", **e})
+            )
+            | "FlattenDLQ" >> beam.Flatten()
+            | "WriteDLQ" >> WriteDLQ(dlq_topic)
+        )
