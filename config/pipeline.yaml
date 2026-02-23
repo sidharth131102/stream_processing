@@ -95,12 +95,6 @@ storage:
     - templates
     vpc_sc:
       protected: true
-  - name: stream-accelerator-3-archive
-    description: Archived raw events
-    folders:
-    - events
-    vpc_sc:
-      protected: true
 pipeline_configs:
   config_directory: config
   bucket: stream-accelerator-3-config
