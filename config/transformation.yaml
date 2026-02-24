@@ -43,16 +43,14 @@ field_mapping:
   #event_time: event_timestamp  
   # (Optional) Example of mapping an event timestamp field
   # Uncomment only if your payload has event_timestamp
-
-  request_id: payload.request_id        # Unique identifier for the request
-  customer_id: payload.customer_id      # Customer identifier
-  request_type: payload.request_type    # Type/category of request
-  priority: payload.priority            # Business priority (e.g., HIGH, LOW)
-  location: payload.location            # Physical or logical location
-  description: payload.description      # Free-text description
-  source_system: payload.source_system  # Originating system name
-  age: payload.age                      # Age of the request in days
-  temperature_c: payload.temperature_c  # Temperature in Celsius (example of numeric field)
+  order_id: payload.order_id
+  address_1: payload.address_1
+  address_2: payload.address_2
+  location: payload.location
+  fast_delivery: payload.fast_delivery
+  amount: payload.amount
+  delivery_date: payload.delivery_date
+  temperature: payload.temperature
 # ------------------------------------------------------------------------------
 # NULL DEFAULTS
 # ------------------------------------------------------------------------------
@@ -73,8 +71,50 @@ field_mapping:
 #   age: 0
 # ------------------------------------------------------------------------------
 null_defaults:
-  - field: age
+  - field: address_2
+    default: ""
+  - field: amount
     default: 0
+  - field: delivery_date
+    default: "1970-01-01"
+  # - field: age
+  #   default: 0
+
+# ------------------------------------------------------------------------------
+# TYPE CASTS
+# ------------------------------------------------------------------------------
+# Purpose:
+# Enforce data types for selected fields after defaults are applied.
+#
+# Example:
+# type_casts:
+#   - field: age
+#     to: integer
+#     default: 0
+#   - field: amount
+#     to: float
+#     default: 0.0
+#   - field: is_priority
+#     to: boolean
+#     default: false
+#   - field: event_date
+#     to: date
+#     default: "1970-01-01"
+#   - field: event_ts_local
+#     to: timestamp
+#     output_field: event_ts_casted
+#     treat_empty_as_null: true
+# ------------------------------------------------------------------------------
+type_casts:
+  - field: temperature
+    to: float
+    default: 0.0
+  - field: amount
+    to: integer
+    default: 0
+  - field: fast_delivery
+    to: boolean
+    default: false
 
 # ------------------------------------------------------------------------------
 # CONCATENATIONS
@@ -93,7 +133,13 @@ null_defaults:
 #       customer_id: NA
 #     type: STRING
 # ------------------------------------------------------------------------------
-concatenations: []
+concatenations:
+  - output_field: full_address
+    inputs: [address_1, address_2]
+    separator: ", "
+    skip_nulls: true
+    default_value: ""
+    type: STRING
 
 # ------------------------------------------------------------------------------
 # BUSINESS RULES
@@ -113,22 +159,22 @@ concatenations: []
 # - Create flags, scores, or categories
 # ------------------------------------------------------------------------------
 
-business_rules:
-  - condition: "event.get('priority') == 'HIGH'"
-    # If priority is HIGH, mark this request as critical
+business_rules: []
+  # - condition: "event.get('priority') == 'HIGH'"
+  #   # If priority is HIGH, mark this request as critical
 
-    output_field: is_critical
-    # New field added to the record
+  #   output_field: is_critical
+  #   # New field added to the record
 
-    value: true
-    # Value assigned when condition evaluates to true
-  - condition: "event.get('request_type') == 'TEMPERATURE_ALERT'"
-    # If request type is refund, assign a risk score
+  #   value: true
+  #   # Value assigned when condition evaluates to true
+  # - condition: "event.get('request_type') == 'TEMPERATURE_ALERT'"
+  #   # If request type is refund, assign a risk score
 
-    output_field: urgency
-    # New field for urgency assessment
+  #   output_field: urgency
+  #   # New field for urgency assessment
 
-    value: true
+  #   value: true
     # Example urgency flag for temperature alerts
 # ------------------------------------------------------------------------------
 # ENRICHMENT
@@ -143,43 +189,53 @@ business_rules:
 # Enrichment runs AFTER field mapping and business rules.
 # ------------------------------------------------------------------------------
 
-enrichment:
-  - type: static_lookup
-    # static_lookup means a fixed key-value mapping defined in YAML
+enrichment: 
+  - type: derived_fields
+    fields:
+      - output_field: amount
+        expression: "abs(event.get('amount') or 0)"
+        type: INT64
+        default: 0
+      - output_field: expected_delivery_date
+        expression: "date_add_days(event.get('delivery_date'), 5)"
+        type: STRING
+        default: "1970-01-01"
+  # - type: static_lookup
+  #   # static_lookup means a fixed key-value mapping defined in YAML
 
-    input_field: "location"
-    # This field MUST already exist (comes from field_mapping)
+  #   input_field: "location"
+  #   # This field MUST already exist (comes from field_mapping)
 
-    lookup:
-      # Mapping of input values → enriched values
-      Bangalore: SOUTH
-      Mumbai: WEST
-      Delhi: NORTH
-      Assam: EAST
+  #   lookup:
+  #     # Mapping of input values → enriched values
+  #     Bangalore: SOUTH
+  #     Mumbai: WEST
+  #     Delhi: NORTH
+  #     Assam: EAST
 
-    output_field: region
-    # New field created based on lookup result
-  - type: range_lookup
-    input_field: "temperature_c"
-    output_field: "temperature_category"
-    output_type: STRING
-    default: "unknown"
-    ranges:
-      - min: -50
-        max: 0
-        value: "freezing"
-      - min: 1
-        max: 15
-        value: "cold"
-      - min: 16
-        max: 25
-        value: "mild"
-      - min: 26
-        max: 35
-        value: "warm"
-      - min: 36
-        max: 50
-        value: "hot"
+  #   output_field: region
+  #   # New field created based on lookup result
+  # - type: range_lookup
+  #   input_field: "temperature_c"
+  #   output_field: "temperature_category"
+  #   output_type: STRING
+  #   default: "unknown"
+  #   ranges:
+  #     - min: -50
+  #       max: 0
+  #       value: "freezing"
+  #     - min: 1
+  #       max: 15
+  #       value: "cold"
+  #     - min: 16
+  #       max: 25
+  #       value: "mild"
+  #     - min: 26
+  #       max: 35
+  #       value: "warm"
+  #     - min: 36
+  #       max: 50
+  #       value: "hot"
   # - type: range_lookup
   #   input_field: "event_age_days"
   #   output_field: "age_bucket"
@@ -266,18 +322,18 @@ enrichment:
 # Runs AFTER enrichment.
 # ------------------------------------------------------------------------------
 
-entity_extraction:
-  - field: "description"
-    # Text field from which entities are extracted
-    # Must already exist (flattened earlier)
+entity_extraction: []
+  # - field: "description"
+  #   # Text field from which entities are extracted
+  #   # Must already exist (flattened earlier)
 
-    entities:
-      - name: equipment
-        # Name of the extracted entity field
+  #   entities:
+  #     - name: equipment
+  #       # Name of the extracted entity field
 
-        pattern: "(transformer|meter|cable)"
-        # Regex pattern used to identify keywords
-        # Case-insensitive matching handled in code
+  #       pattern: "(transformer|meter|cable)"
+  #       # Regex pattern used to identify keywords
+  #       # Case-insensitive matching handled in code
 
 # ------------------------------------------------------------------------------
 # NOTE

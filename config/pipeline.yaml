@@ -129,7 +129,7 @@ pubsub:
   subscriptions:
   - name: json-events-sub
     topic: json-events-topic
-    ack_deadline: 120
+    ack_deadline: 60
     max_delivery_attempts: 5
     dead_letter_topic: json-events-dlq
   - name: json-events-dlq-sub
@@ -153,7 +153,7 @@ docker:
     repository: dataflow-accelerators
   image:
     name: json-stream-accelerator
-    tag: v178
+    tag: v183
     dockerfile: docker/Dockerfile
     context: .
 dataflow:
@@ -164,8 +164,8 @@ dataflow:
     storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-latest.json
     safe_storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-safe.json
     latest_storage_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-latest.json
-    latest_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v178.json
-    previous_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v177.json
+    latest_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v183.json
+    previous_versioned_path: gs://stream-accelerator-3-dataflow/templates/json-streaming-templ-v182.json
   job:
     name_prefix: json-streaming
     worker_region: us-central1
@@ -199,7 +199,7 @@ streaming_tuning:
     enabled: true
     type: fixed
     window_size_sec: 60
-    allowed_lateness_sec: 60
+    allowed_lateness_sec: 120
   batching:
     bigquery:
       enabled: false

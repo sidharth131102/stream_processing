@@ -7,6 +7,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 from pipeline.transforms.field_mapper import FieldMapper
 from pipeline.transforms.null_defaults import NullDefaults
+from pipeline.transforms.type_cast import TypeCast
 from pipeline.transforms.concatenation import Concatenation
 from pipeline.transforms.business_rules import BusinessRules
 from pipeline.transforms.enrichment import Enrichment
@@ -20,6 +21,7 @@ class TransformationEngine(beam.DoFn):
     def __init__(self, cfg):
         self.mapper = FieldMapper(cfg.get("field_mapping", {}))
         self.null_defaults = NullDefaults(cfg.get("null_defaults", []))
+        self.type_cast = TypeCast(cfg.get("type_casts", []))
         self.concatenation = Concatenation(cfg.get("concatenations", []))
         self.rules = BusinessRules(cfg.get("business_rules", []))
         self.enrichment = Enrichment(cfg.get("enrichment", []))
@@ -86,6 +88,7 @@ class TransformationEngine(beam.DoFn):
             logging.info(f"✅ Transform processing dict with keys: {list(event.keys())}")
             event = self.mapper.apply(event)
             event = self.null_defaults.apply(event)
+            event = self.type_cast.apply(event)
             event = self.concatenation.apply(event)
             event = self.rules.apply(event)
             event = self.enrichment.apply(event)

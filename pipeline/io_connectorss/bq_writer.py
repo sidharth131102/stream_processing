@@ -71,6 +71,10 @@ def _normalize_bq_type(bq_type):
     return t
 
 
+def _cast_type_to_bq(cast_type):
+    return _json_type_to_bq(cast_type)
+
+
 def _collect_destination_fields(dest_cfg, transform_cfg, expected_schema=None):
     fields = {
         "event_id": "STRING",
@@ -108,6 +112,14 @@ def _collect_destination_fields(dest_cfg, transform_cfg, expected_schema=None):
             fields[target] = _normalize_bq_type(mapping.get("type", "STRING"))
         else:
             fields.setdefault(target, "STRING")
+
+    for cast in transform_cfg.get("type_casts", []):
+        if not isinstance(cast, dict):
+            continue
+        target = cast.get("output_field") or cast.get("field")
+        if not target:
+            continue
+        fields[target] = _cast_type_to_bq(cast.get("to"))
 
     for rule in transform_cfg.get("business_rules", []):
         fields[rule["output_field"]] = "BOOLEAN"

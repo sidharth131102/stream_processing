@@ -49,21 +49,22 @@ required_fields:
 # Modify this list when:
 # - Business requirements change
 # - New mandatory fields are introduced
-payload_required_fields:
-  - request_id      # Business request identifier
-  - customer_id     # Customer identifier
-  - priority # Business priority (e.g., HIGH, MEDIUM, LOW)
+payload_required_fields: 
+  - order_id      # Business request identifier
+  # - customer_id     # Customer identifier
+  # - priority # Business priority (e.g., HIGH, MEDIUM, LOW)
     
 
 
-length_checks:
-  description:      # Text field to validate
+length_checks: 
+  order_id:      # Text field to validate
     max: 100        # Maximum allowed characters
 
 
 
-type_checks:
-  priority: STRING  # Priority must be a string value
+type_checks: 
+  amount: integer    # Amount must be an integer value
+  # priority: STRING  # Priority must be a string value
 
 # ------------------------------------------------------------------------------
 # NOTE

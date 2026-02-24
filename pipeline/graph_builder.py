@@ -57,11 +57,12 @@ def build_pipeline(p, cfg, subscription):
     # ==================================================
     parsed = (
         main
-        | "ParseEvent" >> beam.ParDo(ParseEvent())
+        | "ParseEvent" >> beam.ParDo(ParseEvent()).with_outputs("dlq", main="main")
     )
-
+    main = parsed.main
+    parse_dlq = parsed.dlq
     assigned = (
-        parsed
+        main
         | "AssignEventTime"
         >> beam.ParDo(AssignEventTime()).with_outputs("dlq", main="main")
     )
@@ -209,6 +210,8 @@ def build_pipeline(p, cfg, subscription):
                 preprocess_dlq
                 | "TagPreprocessDLQ"
                 >> beam.Map(lambda e: {"stage": "preprocess", **e}),
+                parse_dlq
+                | "TagParseDLQ" >> beam.Map(lambda e: {"stage": "parse", **e}),
                 event_time_dlq
                 | "TagEventTimeDLQ"
                 >> beam.Map(lambda e: {"stage": "event_time", **e}),
@@ -234,6 +237,8 @@ def build_pipeline(p, cfg, subscription):
             (
                 preprocess_dlq
                 | "TagPreprocessDLQ" >> beam.Map(lambda e: {"stage": "preprocess", **e}),
+                parse_dlq
+                | "TagParseDLQ" >> beam.Map(lambda e: {"stage": "parse", **e}),
                 event_time_dlq
                 | "TagEventTimeDLQ" >> beam.Map(lambda e: {"stage": "event_time", **e}),
                 late_dlq

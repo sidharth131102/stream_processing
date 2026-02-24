@@ -2,6 +2,7 @@ import apache_beam as beam
 from apache_beam.utils.timestamp import Timestamp
 from datetime import datetime, timezone
 import json
+from pipeline.utils.time_parser import parse_event_ts_to_utc_datetime
 
 
 class WriteRawEventsBQ(beam.PTransform):
@@ -52,13 +53,16 @@ class WriteRawEventsBQ(beam.PTransform):
         event_ts = event.get("event_ts")
 
         if isinstance(event_ts, datetime):
-            event_ts_beam = Timestamp.from_utc_datetime(event_ts)
+            dt = event_ts.astimezone(timezone.utc) if event_ts.tzinfo else event_ts.replace(tzinfo=timezone.utc)
+            event_ts_beam = Timestamp.from_utc_datetime(dt)
             event_ts_raw = event_ts.isoformat()
-
-        elif isinstance(event_ts, str):
-            event_ts_beam = Timestamp.from_rfc3339(event_ts)
-            event_ts_raw = event_ts
-
+        elif event_ts is not None:
+            try:
+                dt = parse_event_ts_to_utc_datetime(event_ts)
+                event_ts_beam = Timestamp.from_utc_datetime(dt)
+            except Exception:
+                event_ts_beam = None
+            event_ts_raw = str(event_ts)
         else:
             event_ts_beam = None
             event_ts_raw = None

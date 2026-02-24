@@ -12,7 +12,7 @@ class LateDataFilter(beam.DoFn):
         lateness_sec = (
             processing_time.micros - event_time.micros
         ) / 1_000_000
-
+        early_sec = (event_time.micros - processing_time.micros) / 1_000_000
         if lateness_sec > self.allowed_lateness_sec:
             yield beam.pvalue.TaggedOutput(
                 "dlq",
@@ -22,5 +22,14 @@ class LateDataFilter(beam.DoFn):
                     "lateness_seconds": lateness_sec,
                 },
             )
+        elif early_sec > 0:
+                yield beam.pvalue.TaggedOutput(
+                    "dlq",
+                    {
+                        "event": event,
+                        "error": f"Early event (early by {early_sec}s)",
+                        "early_seconds": early_sec,
+                    },
+                )
         else:
             yield event

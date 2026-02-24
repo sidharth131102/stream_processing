@@ -1,10 +1,10 @@
 import apache_beam as beam
-from datetime import datetime
 
 # ✅ ADD
 import logging
 import json
 from pipeline.observability.metrics import PipelineMetrics
+from pipeline.utils.time_parser import parse_event_ts_to_utc_datetime
 
 
 class SoftValidate(beam.DoFn):
@@ -24,17 +24,13 @@ class SoftValidate(beam.DoFn):
             if field not in event or event[field] in (None, ""):
                 errors.append(f"Missing required payload field: {field}")
 
-        # 3️⃣ ISO-8601 timestamp validation for event_ts
+        # 3️⃣ Timestamp validation for event_ts (supports multiple formats)
         event_ts = event.get("event_ts")
         if event_ts is not None:
-            if not isinstance(event_ts, str):
-                errors.append("event_ts must be a STRING (ISO-8601)")
-            else:
-                try:
-                    ts = event_ts.replace("Z", "+00:00")
-                    datetime.fromisoformat(ts)
-                except Exception:
-                    errors.append("event_ts is not a valid ISO-8601 timestamp")
+            try:
+                parse_event_ts_to_utc_datetime(event_ts)
+            except Exception:
+                errors.append("event_ts is not in a supported timestamp format")
 
         # 4️⃣ Length checks
         for field, rules in (self.cfg.get("length_checks") or {}).items():

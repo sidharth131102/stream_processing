@@ -1,4 +1,5 @@
 import re
+from datetime import date, datetime, timedelta
 from simpleeval import SimpleEval
 
 
@@ -6,7 +7,25 @@ class Enrichment:
     def __init__(self, enrichments):
         self.enrichments = enrichments or []
         self.evaluator = SimpleEval()
-        self.evaluator.functions = {}
+        self.evaluator.functions = {
+            "date_add_days": self._date_add_days,
+        }
+
+    @staticmethod
+    def _date_add_days(value, days):
+        if value is None:
+            raise ValueError("date value is None")
+
+        if isinstance(value, datetime):
+            base = value.date()
+        elif isinstance(value, date):
+            base = value
+        elif isinstance(value, str):
+            base = date.fromisoformat(value.strip())
+        else:
+            raise ValueError("unsupported date value type")
+
+        return (base + timedelta(days=int(days))).isoformat()
 
     @staticmethod
     def _get_nested(obj, path):

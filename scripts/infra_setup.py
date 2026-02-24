@@ -265,7 +265,7 @@ def main():
     if selected_subnetwork:
         print(f"ℹ Dataflow will use subnetwork: {selected_subnetwork}")
 
-    # 1. Extract CMEK Config
+    # # 1. Extract CMEK Config
     cmek_cfg = cfg.get("security", {}).get("cmek", {})
     cmek_key = cmek_cfg.get("key_name") if cmek_cfg.get("enabled") else None
 
